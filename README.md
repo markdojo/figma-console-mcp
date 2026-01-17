@@ -3,6 +3,8 @@
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> **Fork with enhanced library variable support** - This fork focuses on **Local Mode** improvements, specifically 100% reliable ID resolution for library variables. For **Remote Mode** (Cloudflare Workers), use the [original repository](https://github.com/southleft/figma-console-mcp).
+
 > **Model Context Protocol server** that provides AI assistants with **real-time console access, visual debugging, design system extraction, and design creation** for Figma.
 
 ## What is this?
@@ -21,101 +23,40 @@ Figma Console MCP connects AI assistants (like Claude) to Figma, enabling:
 
 ## ⚡ Quick Start
 
+> **⚠️ Important:** This fork's improvements (100% reliable library variable ID resolution) **only work in Local Mode**. For Remote Mode (Cloudflare Workers/SSE), use the [original repository](https://github.com/southleft/figma-console-mcp).
+
 ### Choose Your Installation Method
 
-This MCP server offers **three installation methods** with different tradeoffs:
+This fork supports **Local Mode** with enhanced library variable support:
 
 | Method | Setup | Auth | Best For |
 |--------|-------|------|----------|
-| **[Remote SSE](#for-most-users-remote-mode-zero-setup)** | ⭐ Paste URL (2 min) | OAuth (automatic) | Most users - design system extraction |
+| **[Local Git](#for-plugin-developers-local-mode)** | git clone (15 min) | PAT (manual) | ✅ **This fork - Enhanced library variables** |
 | **[NPX](#npx-alternative-package-distribution)** | npm package (10 min) | PAT (manual) | Local execution without source code |
-| **[Local Git](#for-plugin-developers-local-mode)** | git clone (15 min) | PAT (manual) | Developers - modify source code |
 
-**Key Insight:** Only Remote SSE offers true zero-setup via OAuth. Both NPX and Local Git require manual `FIGMA_ACCESS_TOKEN` setup.
-
-Choose the setup that fits your needs:
-
-### For Most Users: Remote Mode (Zero Setup)
-
-Perfect for design system extraction and basic debugging. No installation required!
-
-> **Note:** The remote server URLs below point to the original project's server. You can use it as-is, or deploy your own server and update the URLs.
-
-#### Claude Desktop (Recommended)
-
-**Latest Method - No Config Files!**
-
-1. Open Claude Desktop → **Settings** → **Connectors**
-2. Click **"Add Custom Connector"**
-3. Enter:
-   - **Name:** `Figma Console`
-   - **URL:** `https://figma-console-mcp.southleft.com/sse`
-4. Click **"Add"**
-5. Done! ✅
-
-**What you get:**
-- ✅ All 14 Figma tools available immediately
-- ✅ OAuth authentication (automatic when you first use API tools)
-- ✅ Design system extraction (variables*, components, styles)
-- ✅ Console debugging and screenshots
-- ❌ Desktop Bridge plugin NOT available (use Local Mode for that)
-
-*Variables API requires Figma Enterprise plan OR use Local Mode + Desktop Bridge plugin
+**For Remote Mode:** Use the [original repository](https://github.com/southleft/figma-console-mcp) which provides Remote SSE (OAuth, zero-setup) via Cloudflare Workers.
 
 ---
 
-#### Claude Code
+### For Plugin Developers: Local Mode (This Fork)
 
-One-line install:
+**This fork is optimized for Local Mode** with enhanced library variable support:
 
-```bash
-claude mcp add --transport sse figma-console https://figma-console-mcp.southleft.com/sse
-```
+**Use this fork if you:**
+- ✅ Need **100% reliable ID resolution for library variables** (this fork's main improvement)
+- ✅ Are creating aliases to library variables and need reliable IDs
+- ✅ Are developing Figma plugins (need zero-latency console debugging)
+- ✅ Need variables WITHOUT Enterprise plan (via Desktop Bridge plugin)
+- ✅ Need reliable component descriptions (Figma API has bugs, plugin bypasses them)
+- ✅ Want direct access to Figma Desktop state
 
-Verify: `/mcp` should show "figma-console: connected"
+**⚠️ Important:** The **Desktop Bridge plugin ONLY works in Local Mode**. Remote mode cannot access it because the plugin requires direct connection to Figma Desktop via `localhost:9222`.
 
----
-
-#### Cursor
-
-Add to `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "figma-console": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://figma-console-mcp.southleft.com/sse"]
-    }
-  }
-}
-```
-
-Restart Cursor after saving.
-
----
-
-<details>
-<summary><b>Other MCP Clients (Windsurf, Zed, etc.)</b></summary>
-
-Consult your client's MCP documentation for the config file location, then add:
-
-```json
-{
-  "mcpServers": {
-    "figma-console": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://figma-console-mcp.southleft.com/sse"]
-    }
-  }
-}
-```
-
-</details>
-
----
+**Setup time:** 10-15 minutes
 
 ### NPX: Alternative Package Distribution
+
+> **Note:** NPX mode uses the published npm package. This fork's improvements are only available when using Local Git mode. For Remote Mode (SSE/OAuth), use the [original repository](https://github.com/southleft/figma-console-mcp).
 
 **Use NPX if you:**
 - ✅ Want local execution without cloning source code
@@ -125,7 +66,7 @@ Consult your client's MCP documentation for the config file location, then add:
 
 **Setup time:** 10 minutes
 
-**Note:** NPX has **identical authentication requirements** to Local Git mode. For true zero-setup, use [Remote Mode](#for-most-users-remote-mode-zero-setup) instead.
+**Note:** NPX has **identical authentication requirements** to Local Git mode. For true zero-setup Remote Mode, use the [original repository](https://github.com/southleft/figma-console-mcp).
 
 #### Configuration
 
@@ -157,9 +98,13 @@ Add to your MCP config (e.g., `.claude.json` or `claude_desktop_config.json`):
 
 ---
 
-### For Plugin Developers: Local Mode
+### For Plugin Developers: Local Mode (This Fork)
 
-**Use Local Mode if you:**
+**This fork is optimized for Local Mode with enhanced library variable support:**
+
+**Use this fork if you:**
+- ✅ Need **100% reliable ID resolution for library variables** (this fork's main improvement)
+- ✅ Are creating aliases to library variables and need reliable IDs
 - ✅ Are developing Figma plugins (need zero-latency console debugging)
 - ✅ Need variables WITHOUT Enterprise plan (via Desktop Bridge plugin)
 - ✅ Need reliable component descriptions (Figma API has bugs, plugin bypasses them)
@@ -586,6 +531,18 @@ MIT - See [LICENSE](LICENSE) file for details.
 
 This project is a fork of [figma-console-mcp](https://github.com/southleft/figma-console-mcp) by [southleft](https://github.com/southleft).
 
+### When to Use This Fork vs Original
+
+**Use this fork if:**
+- ✅ You need **Local Mode** with enhanced library variable support
+- ✅ You're creating aliases to library variables and need 100% reliable IDs
+- ✅ You're developing plugins and need the Desktop Bridge plugin features
+
+**Use the [original repository](https://github.com/southleft/figma-console-mcp) if:**
+- ✅ You need **Remote Mode** (Cloudflare Workers/SSE with OAuth)
+- ✅ You want zero-setup via Remote SSE endpoint
+- ✅ You don't need the enhanced library variable features
+
 **Original Project:**
 - Repository: https://github.com/southleft/figma-console-mcp
 - License: MIT
@@ -594,6 +551,7 @@ This project is a fork of [figma-console-mcp](https://github.com/southleft/figma
 - ✅ 100% reliable ID resolution for library variables via `importVariableByKeyAsync`
 - ✅ Enhanced method tracking and summary statistics
 - ✅ Removed ineffective code paths for cleaner implementation
+- ⚠️ **Local Mode only** - Remote Mode improvements not included
 
 We're grateful to the original maintainers for building this excellent MCP server!
 - 🌐 [Model Context Protocol](https://modelcontextprotocol.io/)
