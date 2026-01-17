@@ -55,48 +55,6 @@ This fork supports **Local Mode only** with enhanced library variable support:
 
 **Setup time:** 10-15 minutes
 
-### NPX: Alternative Package Distribution
-
-> **Note:** NPX mode uses the published npm package. This fork's improvements are only available when using Local Git mode. For Remote Mode (SSE/OAuth), use the [original repository](https://github.com/southleft/figma-console-mcp).
-
-**Use NPX if you:**
-- ✅ Want local execution without cloning source code
-- ✅ Need Desktop Bridge plugin features
-- ✅ Prefer npm package distribution over git
-- ⚠️ Are comfortable with manual `FIGMA_ACCESS_TOKEN` setup
-
-**Setup time:** 10 minutes
-
-**Note:** NPX has **identical authentication requirements** to Local Git mode. For true zero-setup Remote Mode, use the [original repository](https://github.com/southleft/figma-console-mcp).
-
-#### Configuration
-
-Add to your MCP config (e.g., `.claude.json` or `claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "figma-console": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "figma-console-mcp@latest"],
-      "env": {
-        "FIGMA_ACCESS_TOKEN": "your_figma_access_token_here"
-      }
-    }
-  }
-}
-```
-
-#### Prerequisites
-
-- Get **Figma Personal Access Token**: https://www.figma.com/developers/api#access-tokens
-- Restart Figma Desktop with `--remote-debugging-port=9222`
-  - **macOS:** `open -a "Figma" --args --remote-debugging-port=9222`
-  - **Windows:** `cmd /c "%LOCALAPPDATA%\Figma\Figma.exe" --remote-debugging-port=9222`
-
-**📖 [Complete NPX Setup Guide](docs/NPX-INSTALLATION.md)**
-
 ---
 
 ### For Plugin Developers: Local Mode (This Fork)
