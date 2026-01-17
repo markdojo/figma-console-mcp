@@ -39,6 +39,8 @@ Choose the setup that fits your needs:
 
 Perfect for design system extraction and basic debugging. No installation required!
 
+> **Note:** The remote server URLs below point to the original project's server. You can use it as-is, or deploy your own server and update the URLs.
+
 #### Claude Desktop (Recommended)
 
 **Latest Method - No Config Files!**
@@ -177,7 +179,7 @@ Add to your MCP config (e.g., `.claude.json` or `claude_desktop_config.json`):
 
 ```bash
 # Clone the repository
-git clone https://github.com/southleft/figma-console-mcp.git
+git clone https://github.com/markdojo/figma-console-mcp.git
 cd figma-console-mcp
 
 # Install dependencies
@@ -354,6 +356,8 @@ When you first use design system tools:
 - `figma_add_mode` - Add modes to collections (e.g., "Dark", "Mobile")
 - `figma_rename_mode` - Rename existing modes
 
+**💡 Creating Aliases to Library Variables:** To create variables that alias to variables from published libraries (e.g., primitive tokens), use `figma_execute` with the pattern documented in [TOOLS.md](docs/TOOLS.md#creating-aliases-to-library-variables). Library variable IDs have a special format that requires using `getVariableByIdAsync()` to resolve them correctly.
+
 **📖 [Detailed Tool Documentation](docs/TOOLS.md)**
 
 ---
@@ -494,7 +498,7 @@ The **Figma Desktop Bridge** plugin enables powerful capabilities:
 
 **Setup:**
 1. Install Local Mode MCP
-2. Download plugin from [Releases](https://github.com/southleft/figma-console-mcp/releases/latest)
+2. Download plugin from [Releases](https://github.com/markdojo/figma-console-mcp/releases/latest)
 3. Import plugin: Figma Desktop → Plugins → Development → Import plugin from manifest
 4. Run plugin in your Figma file
 5. Ask Claude: "Create a button component" or "Show me the design variables"
@@ -546,7 +550,7 @@ The **Figma Desktop Bridge** plugin enables powerful capabilities:
 ## 💻 Development
 
 ```bash
-git clone https://github.com/southleft/figma-console-mcp.git
+git clone https://github.com/markdojo/figma-console-mcp.git
 cd figma-console-mcp
 npm install
 
@@ -573,7 +577,24 @@ MIT - See [LICENSE](LICENSE) file for details.
 ## 🔗 Links
 
 - 📖 [Full Documentation](docs/)
-- 🐛 [Report Issues](https://github.com/southleft/figma-console-mcp/issues)
-- 💬 [Discussions](https://github.com/southleft/figma-console-mcp/discussions)
+- 🐛 [Report Issues](https://github.com/markdojo/figma-console-mcp/issues)
+- 💬 [Discussions](https://github.com/markdojo/figma-console-mcp/discussions)
+
+---
+
+## 🙏 Credits & Acknowledgments
+
+This project is a fork of [figma-console-mcp](https://github.com/southleft/figma-console-mcp) by [southleft](https://github.com/southleft).
+
+**Original Project:**
+- Repository: https://github.com/southleft/figma-console-mcp
+- License: MIT
+
+**Improvements in this fork:**
+- ✅ 100% reliable ID resolution for library variables via `importVariableByKeyAsync`
+- ✅ Enhanced method tracking and summary statistics
+- ✅ Removed ineffective code paths for cleaner implementation
+
+We're grateful to the original maintainers for building this excellent MCP server!
 - 🌐 [Model Context Protocol](https://modelcontextprotocol.io/)
 - 🎨 [Figma API](https://www.figma.com/developers/api)

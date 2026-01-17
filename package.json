@@ -43,9 +43,13 @@
 		"cloudflare",
 		"workers"
 	],
-	"author": "Your Name",
+	"author": "markdojo",
 	"license": "MIT",
 	"repository": {
+		"type": "git",
+		"url": "https://github.com/markdojo/figma-console-mcp.git"
+	},
+	"originalRepository": {
 		"type": "git",
 		"url": "https://github.com/southleft/figma-console-mcp.git"
 	},

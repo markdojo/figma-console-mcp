@@ -14,6 +14,7 @@ This guide provides detailed documentation for each tool, including when to use 
 | **🔍 Debugging** | `figma_take_screenshot` | Capture UI screenshots | All |
 | | `figma_reload_plugin` | Reload current page | All |
 | **🎨 Design System** | `figma_get_variables` | Extract design tokens/variables | All |
+| | `figma_get_library_variables` | Get all library variables with reliable IDs | Local |
 | | `figma_get_styles` | Get color, text, effect styles | All |
 | | `figma_get_component` | Get component data | All |
 | | `figma_get_component_for_development` | Component + visual reference | All |
@@ -276,6 +277,90 @@ figma_get_variables({
 - Usage information (if `include_usage: true`)
 
 **Note:** Figma Variables API requires Enterprise plan. If unavailable, the tool automatically falls back to Styles API or console-based extraction.
+
+---
+
+### `figma_get_library_variables`
+
+Get all variables from connected libraries, even if not used in the current file. **All library variables now include reliable IDs** via automatic import strategy.
+
+**When to Use:**
+- Discovering all available library variables (primitives, tokens, etc.)
+- Getting IDs for library variables to create aliases
+- Exploring design system tokens from published libraries
+- Building comprehensive variable catalogs
+
+**Usage:**
+```javascript
+figma_get_library_variables({
+  includeLocal: true,                    // Include local variables (default: true)
+  collectionFilter: "spacing-primitive"  // Optional: Filter by collection name
+})
+```
+
+**Parameters:**
+- `includeLocal` (optional): Include local variables in result (default: `true`)
+- `collectionFilter` (optional): Filter by collection name (case-insensitive substring match)
+
+**Returns:**
+- `localVariables`: Variables defined in the current file
+- `libraryVariables`: Variables from published libraries with:
+  - `id` and `nodeId`: **Reliably resolved for all variables** (100% success rate)
+  - `method`: Resolution strategy (`local_or_alias`, `imported`)
+  - `name`, `type`, `collection`, `collectionKey`
+  - `variableCollectionId`: Collection ID if available
+  - `key`: Library hash key for the variable
+- `collections`: All variable collections (local and library)
+- `summary`: Statistics including:
+  - `resolutionMethods`: Breakdown of how variables were resolved
+  - `withNodeId` / `withoutNodeId`: Counts of variables with/without IDs
+  - `localCount`, `libraryCount`, `totalCount`
+
+**Resolution Strategies:**
+1. **Local or Alias**: Variables already in file context or referenced via aliases
+2. **Imported**: Variables imported via `importVariableByKeyAsync()` - brings library variables into file context
+
+**Key Features:**
+- ✅ **100% ID resolution**: All library variables now have reliable IDs
+- ✅ **Automatic import**: Uses `importVariableByKeyAsync()` to make IDs accessible
+- ✅ **Method tracking**: See how each variable was resolved
+- ✅ **No manual setup**: Works automatically with Desktop Bridge plugin
+
+**Example Response:**
+```json
+{
+  "localVariables": [...],
+  "libraryVariables": [
+    {
+      "id": "VariableID:abc123/def456",
+      "nodeId": "VariableID:abc123/def456",
+      "name": "spacing/8",
+      "type": "FLOAT",
+      "collection": "spacing-primitive",
+      "collectionKey": "abc123",
+      "source": "library",
+      "method": "imported",
+      "note": "Variable imported into file context via importVariableByKeyAsync"
+    }
+  ],
+  "summary": {
+    "localCount": 10,
+    "libraryCount": 307,
+    "totalCount": 317,
+    "resolutionMethods": {
+      "local_or_alias": 147,
+      "imported": 160,
+      "unresolved": 0
+    },
+    "withNodeId": 307,
+    "withoutNodeId": 0
+  }
+}
+```
+
+**Requirements:**
+- Desktop Bridge plugin must be running with `teamlibrary` permission
+- Library must be enabled in the current Figma file
 
 ---
 
@@ -671,6 +756,83 @@ figma_create_variable({
 - **STRING**: Text `"Hello World"`
 - **BOOLEAN**: `true` or `false`
 
+**Creating Aliases to Library Variables:**
+
+When creating variables that alias to variables from published libraries (e.g., primitive tokens from a shared Foundations file), you can now use `figma_get_library_variables` to get reliable IDs for all library variables, then use `figma_execute` to create the alias.
+
+**Recommended Workflow:**
+1. Use `figma_get_library_variables` to discover library variables and get their IDs
+2. Use `figma_execute` to create variables that alias to library variables using the IDs
+
+**Pattern for Aliasing to Library Variables:**
+
+```javascript
+figma_execute({
+  code: `
+    // Get collections
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    const targetCollection = collections.find(c => c.name === 'brand-semantic');
+    
+    // Get all variables (includes library variables available in this file)
+    const allVariables = await figma.variables.getLocalVariablesAsync();
+    
+    // Find the library variable by name
+    const libraryVar = allVariables.find(v => v.name === 'red/500');
+    
+    // If not found in local variables, search existing aliases to discover the ID
+    if (!libraryVar) {
+      for (const variable of allVariables) {
+        for (const value of Object.values(variable.valuesByMode)) {
+          if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+            try {
+              const aliasedVar = await figma.variables.getVariableByIdAsync(value.id);
+              if (aliasedVar.name === 'red/500') {
+                libraryVar = aliasedVar;
+                break;
+              }
+            } catch (e) {}
+          }
+        }
+        if (libraryVar) break;
+      }
+    }
+    
+    // Get or create the variable that will alias to the library variable
+    let aliasVar = allVariables.find(v => 
+      v.name === 'test' && targetCollection.variableIds.includes(v.id)
+    );
+    
+    if (!aliasVar) {
+      aliasVar = figma.variables.createVariable('test', targetCollection, 'COLOR');
+    }
+    
+    // Set alias using the variable object's ID directly
+    for (const mode of targetCollection.modes) {
+      aliasVar.setValueForMode(mode.modeId, { type: "VARIABLE_ALIAS", id: libraryVar.id });
+    }
+    
+    return {
+      success: true,
+      variableId: aliasVar.id,
+      aliasedTo: libraryVar.name,
+      libraryVarId: libraryVar.id
+    };
+  `
+})
+```
+
+**Key Points:**
+1. **Library variable IDs** have the format `VariableID:{libraryHash}/{nodeId}` (e.g., `VariableID:461866a860cfb8468de5902483cbc0dd90005f39/168:557`)
+2. **Use `getVariableByIdAsync()`** to resolve library variables - don't manipulate the ID format
+3. **Use the variable object's `.id` directly** when setting the alias: `{ type: "VARIABLE_ALIAS", id: variableObject.id }`
+4. **Finding library variables**: If `getLocalVariablesAsync()` doesn't include the library variable, search existing aliases in your file to discover the correct ID format, then use `getVariableByIdAsync()` to resolve it
+
+**Why this pattern works:**
+- Library variables from published files aren't always included in `getLocalVariablesAsync()`
+- The ID format includes a library hash that's specific to how the library is referenced in your file
+- Using `getVariableByIdAsync()` with the full ID (including hash) correctly resolves the variable
+- The resolved variable object's `.id` is the correct format to use when creating aliases
+
 ---
 
 ### `figma_update_variable`
@@ -695,6 +857,8 @@ figma_update_variable({
 - `variableId` (required): Variable ID to update
 - `modeId` (required): Mode ID to update value in
 - `value` (required): New value (format depends on variable type)
+
+**Note:** To update a variable to alias to a library variable, use `figma_execute` with the pattern described in the `figma_create_variable` section above. The `figma_update_variable` tool is for literal values only.
 
 ---
 

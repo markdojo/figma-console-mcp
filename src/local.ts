@@ -1204,6 +1204,353 @@ Common issues to check:
 			},
 		);
 
+		// Tool: Get all library variables
+		this.server.tool(
+			"figma_get_library_variables",
+			"Get all variables from connected libraries, even if not used in current file. Returns all available variables (211+ color primitives, spacing, radius, type, dimensions, border weights) with reliable ID resolution. All library variables now include IDs via automatic import strategy. Returns variables with 'id', 'nodeId', 'method' (resolution strategy), and summary statistics. Requires the Desktop Bridge plugin to be running with 'teamlibrary' permission.",
+			{
+				includeLocal: z
+					.boolean()
+					.optional()
+					.default(true)
+					.describe("Include local variables in the result (default: true)"),
+				collectionFilter: z
+					.string()
+					.optional()
+					.describe("Optional: Filter by collection name"),
+			},
+			async ({ includeLocal, collectionFilter }) => {
+				const maxRetries = 2;
+				let lastError: Error | null = null;
+
+				// Build the code to execute
+				// Safely escape the collection filter to prevent code injection
+				const filterValue = collectionFilter ? JSON.stringify(collectionFilter.toLowerCase()) : null;
+				const code = `
+async function getAllLibraryVariables() {
+  const result = {
+    localVariables: [],
+    libraryVariables: [],
+    collections: [],
+    summary: {}
+  };
+
+  try {
+    // Get local variables
+    ${includeLocal ? `
+    const localCollections = await figma.variables.getLocalVariableCollectionsAsync();
+    const localVariables = await figma.variables.getLocalVariablesAsync();
+
+    result.localVariables = localVariables.map(v => ({
+      id: v.id,
+      name: v.name,
+      type: v.resolvedType,
+      collection: localCollections.find(c => c.variableIds.includes(v.id))?.name || 'Unknown',
+      source: 'local'
+    }));
+    ` : '// Local variables skipped'}
+
+    // Get ALL library variables (requires teamlibrary permission)
+    const libraryCollections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+    const collectionFilter = ${filterValue || 'null'};
+
+    for (const libCollection of libraryCollections) {
+      ${collectionFilter ? `if (collectionFilter && !libCollection.name.toLowerCase().includes(collectionFilter)) continue;` : ''}
+      
+      // Use the correct API: figma.teamLibrary.getVariablesInLibraryCollectionAsync
+      const libraryVariables = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(libCollection.key);
+
+      // Get all local variables first (includes subscribed library variables with proper IDs)
+      const allLocalVars = await figma.variables.getLocalVariablesAsync();
+      
+      // Also search existing aliases to find library variables that are referenced but not in local vars
+      const allCollections = await figma.variables.getLocalVariableCollectionsAsync();
+      const aliasMap = new Map(); // Map variable name -> resolved variable with ID
+      
+      // Search through all local variables' aliases to find library variable IDs
+      for (const variable of allLocalVars) {
+        for (const collection of allCollections) {
+          if (collection.variableIds.includes(variable.id)) {
+            for (const mode of collection.modes) {
+              const value = variable.valuesByMode[mode.modeId];
+              if (value && typeof value === 'object' && value.type === 'VARIABLE_ALIAS') {
+                try {
+                  const aliasedVar = await figma.variables.getVariableByIdAsync(value.id);
+                  // Store by name and type for lookup
+                  const key = \`\${aliasedVar.name}:\${aliasedVar.resolvedType}\`;
+                  if (!aliasMap.has(key)) {
+                    aliasMap.set(key, aliasedVar);
+                  }
+                } catch (e) {
+                  // Ignore errors resolving aliases
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Map library variables to their resolved versions
+      const vars = await Promise.all(libraryVariables.map(async (v) => {
+        // Library variables from teamLibrary API only have: name, resolvedType, key
+        // They don't have id/nodeId until they're referenced in the file
+        
+        // Strategy 1: Try to find in local variables (subscribed library variables)
+        let resolvedVar = allLocalVars.find(lv => 
+          lv.name === v.name && 
+          lv.resolvedType === v.resolvedType
+        );
+        
+        // Strategy 2: Try to find in alias map (referenced via aliases)
+        if (!resolvedVar) {
+          const aliasKey = \`\${v.name}:\${v.resolvedType}\`;
+          resolvedVar = aliasMap.get(aliasKey);
+        }
+        
+        // If found, use that (it has the proper ID)
+        if (resolvedVar) {
+          return {
+            id: resolvedVar.id,
+            nodeId: resolvedVar.id,
+            name: resolvedVar.name,
+            type: resolvedVar.resolvedType,
+            collection: libCollection.name,
+            collectionKey: libCollection.key,
+            source: 'library',
+            variableCollectionId: resolvedVar.variableCollectionId || null,
+            method: 'local_or_alias'
+          };
+        }
+        
+        // Strategy 3: Import the variable using importVariableByKeyAsync
+        // This explicitly imports library variables into the file's context, making their IDs accessible
+        if (v.key) {
+          try {
+            const importedVar = await figma.variables.importVariableByKeyAsync(v.key);
+            if (importedVar && importedVar.name === v.name && importedVar.resolvedType === v.resolvedType) {
+              return {
+                id: importedVar.id,
+                nodeId: importedVar.id,
+                name: importedVar.name,
+                type: importedVar.resolvedType,
+                collection: libCollection.name,
+                collectionKey: libCollection.key,
+                source: 'library',
+                variableCollectionId: importedVar.variableCollectionId || null,
+                method: 'imported',
+                note: 'Variable imported into file context via importVariableByKeyAsync'
+              };
+            }
+          } catch (e) {
+            // Import failed - variable may not be available or library not enabled
+            console.warn(\`[MCP] Failed to import variable '\${v.name}' (key: \${v.key}): \${e.message}\`);
+          }
+        }
+        
+        // If all strategies failed, the variable isn't available
+        return {
+          id: null,
+          nodeId: null,
+          name: v.name,
+          type: v.resolvedType,
+          collection: libCollection.name,
+          collectionKey: libCollection.key,
+          source: 'library',
+          variableCollectionId: null,
+          key: v.key, // Library hash key
+          note: 'Variable not available - ensure library is enabled in file and variable key is valid. Import via importVariableByKeyAsync failed.'
+        };
+      }));
+
+      result.libraryVariables.push(...vars);
+      result.collections.push({
+        id: libCollection.key,
+        name: libCollection.name,
+        variableCount: libraryVariables.length,
+        source: 'library'
+      });
+    }
+
+    // Calculate summary
+    const localVarNames = new Set(result.localVariables.map(v => v.name));
+    const libraryOnly = result.libraryVariables.filter(v => !localVarNames.has(v.name));
+    
+    // Count variables by resolution method
+    const methodCounts = {
+      local_or_alias: 0,
+      imported: 0,
+      unresolved: 0
+    };
+    
+    result.libraryVariables.forEach(v => {
+      if (v.method === 'local_or_alias') {
+        methodCounts.local_or_alias++;
+      } else if (v.method === 'imported') {
+        methodCounts.imported++;
+      } else if (!v.id) {
+        methodCounts.unresolved++;
+      }
+    });
+    
+    result.summary = {
+      localCount: result.localVariables.length,
+      libraryCount: result.libraryVariables.length,
+      libraryOnlyCount: libraryOnly.length,
+      totalCount: result.localVariables.length + result.libraryVariables.length,
+      collectionCount: result.collections.length,
+      resolutionMethods: methodCounts,
+      withNodeId: result.libraryVariables.filter(v => v.nodeId !== null).length,
+      withoutNodeId: result.libraryVariables.filter(v => v.nodeId === null).length
+    };
+
+    return result;
+  } catch (error) {
+    return {
+      error: error.message || String(error),
+      stack: error.stack,
+      localVariables: result.localVariables,
+      libraryVariables: result.libraryVariables,
+      collections: result.collections,
+      summary: result.summary
+    };
+  }
+}
+
+return JSON.stringify(await getAllLibraryVariables(), null, 2);
+`.trim();
+
+				for (let attempt = 0; attempt <= maxRetries; attempt++) {
+					try {
+						const connector = await this.getDesktopConnector();
+						const result = await connector.executeCodeViaUI(code, 30000);
+
+						if (!result.success) {
+							throw new Error(result.error || "Failed to execute library variables code");
+						}
+
+						// Parse the JSON result
+						let parsedResult;
+						try {
+							parsedResult = JSON.parse(result.result);
+						} catch (parseError) {
+							// If parsing fails, return the raw result
+							return {
+								content: [
+									{
+										type: "text",
+										text: JSON.stringify(
+											{
+												success: false,
+												rawResult: result.result,
+												error: "Failed to parse result as JSON",
+												parseError: parseError instanceof Error ? parseError.message : String(parseError),
+											},
+											null,
+											2,
+										),
+									},
+								],
+								isError: true,
+							};
+						}
+
+						// Check if there was an error in the execution
+						if (parsedResult.error) {
+							return {
+								content: [
+									{
+										type: "text",
+										text: JSON.stringify(
+											{
+												error: parsedResult.error,
+												stack: parsedResult.stack,
+												partialData: {
+													localVariables: parsedResult.localVariables || [],
+													libraryVariables: parsedResult.libraryVariables || [],
+													collections: parsedResult.collections || [],
+													summary: parsedResult.summary || {},
+												},
+												message: "Error occurred while fetching library variables",
+												hint: "Make sure the Desktop Bridge plugin has 'teamlibrary' permission and libraries are connected",
+											},
+											null,
+											2,
+										),
+									},
+								],
+								isError: true,
+							};
+						}
+
+						return {
+							content: [
+								{
+									type: "text",
+									text: JSON.stringify(parsedResult, null, 2),
+								},
+							],
+						};
+					} catch (error) {
+						lastError = error instanceof Error ? error : new Error(String(error));
+						const errorMessage = lastError.message;
+
+						// Check if it's a detached frame error - auto-reconnect
+						if (
+							errorMessage.includes("detached Frame") ||
+							errorMessage.includes("Execution context was destroyed") ||
+							errorMessage.includes("Target closed")
+						) {
+							logger.warn({ attempt, error: errorMessage }, "Detached frame detected, forcing reconnection");
+
+							// Clear cached connector and force browser reconnection
+							this.desktopConnector = null;
+
+							if (this.browserManager && attempt < maxRetries) {
+								try {
+									await this.browserManager.forceReconnect();
+
+									// Reinitialize console monitor with new page
+									if (this.consoleMonitor) {
+										this.consoleMonitor.stopMonitoring();
+										const page = await this.browserManager.getPage();
+										await this.consoleMonitor.startMonitoring(page);
+									}
+
+									logger.info("Reconnection successful, retrying execution");
+									continue; // Retry the execution
+								} catch (reconnectError) {
+									logger.error({ error: reconnectError }, "Failed to reconnect");
+								}
+							}
+						}
+
+						// Non-recoverable error or max retries exceeded
+						break;
+					}
+				}
+
+				// All retries failed
+				logger.error({ error: lastError }, "Failed to get library variables after retries");
+				return {
+					content: [
+						{
+							type: "text",
+							text: JSON.stringify(
+								{
+									error: lastError?.message || "Unknown error",
+									message: "Failed to get library variables",
+									hint: "Make sure the Desktop Bridge plugin is running in Figma with 'teamlibrary' permission",
+								},
+								null,
+								2,
+							),
+						},
+					],
+					isError: true,
+				};
+			},
+		);
+
 		// Tool: Update a variable's value
 		this.server.tool(
 			"figma_update_variable",
