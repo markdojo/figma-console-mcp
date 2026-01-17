@@ -118,7 +118,7 @@ Add this configuration:
 - Use forward slashes `/` even on Windows
 - **No API token needed** for `figma_get_library_variables` (uses Desktop Bridge plugin)
 
-**Optional:** If you want to use tools that access Figma files via URL (like `figma_get_variables`), add the token:
+**Optional:** Only needed for REST API tools (like `figma_get_variables` for remote files). Your main tool `figma_get_library_variables` works without a token. If you need REST API access, add:
 
 ```json
 {
@@ -166,16 +166,19 @@ Quit Claude Desktop completely and relaunch it. The MCP server will connect auto
 
 **📖 For more details:** See [Complete Setup Guide](docs/SETUP.md)
 
-#### Optional Step: Get Figma API Token
+#### Optional: Figma API Token (Only for REST API Tools)
 
-**Only needed if you want to use tools that access Figma files via URL** (like `figma_get_variables` for remote files). The `figma_get_library_variables` tool (this fork's main feature) **does NOT require a token**.
+**⚠️ Not needed for `figma_get_library_variables`!** This fork's main feature uses Desktop Bridge plugin (no token required).
 
+**Only add a token if you want to use REST API tools** like:
+- `figma_get_variables` (for accessing files via URL)
+- `figma_get_file_data` (for remote file access)
+- `figma_get_component` (for remote component access)
+
+**To add token (optional):**
 1. Visit https://www.figma.com/developers/api#access-tokens
-2. Click "Get personal access token"
-3. Enter description: "Figma Console MCP Local"
-4. Click "Generate token"
-5. **Copy the token** (you won't see it again!)
-6. Add it to your Claude Desktop config as shown in Step 2 above
+2. Generate a token
+3. Add it to your Claude Desktop config as shown in Step 2 above
 
 ---
 
