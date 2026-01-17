@@ -204,3 +204,4 @@ Temporary Items
 # Development documentation (internal use only)
 docs/testing/
 docs/analysis/
+.claude/
