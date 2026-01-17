@@ -134,20 +134,32 @@ npm install
 npm run build:local
 ```
 
-#### Step 2: Get Figma Personal Access Token
+#### Step 2: Configure Claude Desktop
 
-1. Visit https://www.figma.com/developers/api#access-tokens
-2. Click "Get personal access token"
-3. Enter description: "Figma Console MCP Local"
-4. Click "Generate token"
-5. **Copy the token** (you won't see it again!)
-
-#### Step 3: Configure Claude Desktop
+> **💡 No API Token Required!** The `figma_get_library_variables` tool (this fork's main improvement) uses the Desktop Bridge plugin and **does NOT require a Figma API token**. However, if you want to use other tools that access Figma files via URL (like `figma_get_variables`), you'll need a token. See [Optional: Get API Token](#optional-step-get-figma-api-token) below.
 
 **macOS:** Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows:** Edit `%APPDATA%\Claude\claude_desktop_config.json`
 
 Add this configuration:
+
+```json
+{
+  "mcpServers": {
+    "figma-console-local": {
+      "command": "node",
+      "args": ["/absolute/path/to/figma-console-mcp/dist/local.js"]
+    }
+  }
+}
+```
+
+**Important:**
+- Replace `/absolute/path/to/figma-console-mcp` with the actual absolute path where you cloned the repo
+- Use forward slashes `/` even on Windows
+- **No API token needed** for `figma_get_library_variables` (uses Desktop Bridge plugin)
+
+**Optional:** If you want to use tools that access Figma files via URL (like `figma_get_variables`), add the token:
 
 ```json
 {
@@ -163,12 +175,7 @@ Add this configuration:
 }
 ```
 
-**Important:**
-- Replace `/absolute/path/to/figma-console-mcp` with the actual absolute path where you cloned the repo
-- Replace `figd_YOUR_TOKEN_HERE` with your actual Figma token from Step 2
-- Use forward slashes `/` even on Windows
-
-#### Step 4: Launch Figma Desktop with Remote Debugging
+#### Step 3: Launch Figma Desktop with Remote Debugging
 
 **⚠️ CRITICAL:** Quit Figma completely first, then restart it with the debug flag:
 
@@ -182,11 +189,11 @@ open -a "Figma" --args --remote-debugging-port=9222
 cmd /c "%LOCALAPPDATA%\Figma\Figma.exe" --remote-debugging-port=9222
 ```
 
-#### Step 5: Restart Claude Desktop
+#### Step 4: Restart Claude Desktop
 
 Quit Claude Desktop completely and relaunch it. The MCP server will connect automatically.
 
-#### Step 6: Verify Setup
+#### Step 5: Verify Setup
 
 1. **Check debug port is working:**
    - Open Chrome browser
@@ -200,6 +207,21 @@ Quit Claude Desktop completely and relaunch it. The MCP server will connect auto
 
 **📖 For more details:** See [Complete Setup Guide](docs/SETUP.md)
 
+#### Optional Step: Get Figma API Token
+
+**Only needed if you want to use tools that access Figma files via URL** (like `figma_get_variables` for remote files). The `figma_get_library_variables` tool (this fork's main feature) **does NOT require a token**.
+
+1. Visit https://www.figma.com/developers/api#access-tokens
+2. Click "Get personal access token"
+3. Enter description: "Figma Console MCP Local"
+4. Click "Generate token"
+5. **Copy the token** (you won't see it again!)
+6. Add it to your Claude Desktop config as shown in Step 2 above
+
+---
+
+> **💡 For Remote Mode (Cloudflare Workers/SSE):** This fork's improvements only work in Local Mode. For Remote Mode with OAuth, use the [original repository](https://github.com/southleft/figma-console-mcp).
+
 ---
 
 ## 📊 Installation Method Comparison
@@ -207,13 +229,14 @@ Quit Claude Desktop completely and relaunch it. The MCP server will connect auto
 | Feature | Remote SSE | NPX | Local Git |
 |---------|------------|-----|-----------|
 | **Setup** | 2 minutes | 10 minutes | 15 minutes |
-| **Prerequisites** | None | PAT + Figma restart | PAT + Figma restart + git |
-| **Authentication** | OAuth (automatic) | PAT (manual) | PAT (manual) |
+| **Prerequisites** | None | Figma restart | Figma restart + git |
+| **Authentication** | OAuth (automatic) | None* (Desktop Bridge) | None* (Desktop Bridge) |
 | **Console logs** | ✅ | ✅ (zero latency) | ✅ (zero latency) |
 | **API access** | ✅ | ✅ | ✅ |
 | **Desktop Bridge plugin** | ❌ | ✅ | ✅ |
 | **AI-Assisted Design Creation** | ❌ | ✅ (via plugin) | ✅ (via plugin) |
-| **Variables (no Enterprise)** | ❌ | ✅ (via plugin) | ✅ (via plugin) |
+| **Variables (no Enterprise)** | ❌ | ✅ (via plugin, no token needed) | ✅ (via plugin, no token needed) |
+| **Library Variables (this fork)** | ❌ | ❌ (use original repo) | ✅ (100% ID resolution) |
 | **Reliable descriptions** | ⚠️ (API bugs) | ✅ (via plugin) | ✅ (via plugin) |
 | **Source code access** | ❌ | ❌ | ✅ |
 | **Distribution** | URL | npm package | git clone |
