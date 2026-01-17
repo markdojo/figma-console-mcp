@@ -17,7 +17,7 @@ Figma Console MCP connects AI assistants (like Claude) to Figma, enabling:
 - **✏️ Design creation** - Create UI components, frames, and layouts directly in Figma
 - **🔧 Variable management** - Create, update, rename, and delete design tokens
 - **⚡ Real-time monitoring** - Watch logs as plugins execute
-- **🔄 Three ways to install** - Remote SSE (OAuth, zero-setup), NPX (npm package), or Local Git (source code)
+- **🔄 Local Mode with enhanced library variables** - This fork focuses on Local Git installation with improved library variable support
 
 ---
 
@@ -27,14 +27,15 @@ Figma Console MCP connects AI assistants (like Claude) to Figma, enabling:
 
 ### Choose Your Installation Method
 
-This fork supports **Local Mode** with enhanced library variable support:
+This fork supports **Local Mode only** with enhanced library variable support:
 
 | Method | Setup | Auth | Best For |
 |--------|-------|------|----------|
-| **[Local Git](#for-plugin-developers-local-mode)** | git clone (15 min) | PAT (manual) | ✅ **This fork - Enhanced library variables** |
-| **[NPX](#npx-alternative-package-distribution)** | npm package (10 min) | PAT (manual) | Local execution without source code |
+| **[Local Git](#for-plugin-developers-local-mode)** | git clone (15 min) | None* | ✅ **This fork - Enhanced library variables** |
 
-**For Remote Mode:** Use the [original repository](https://github.com/southleft/figma-console-mcp) which provides Remote SSE (OAuth, zero-setup) via Cloudflare Workers.
+*No API token needed for `figma_get_library_variables` (uses Desktop Bridge plugin)
+
+**For Remote Mode or NPX:** Use the [original repository](https://github.com/southleft/figma-console-mcp) which provides Remote SSE (OAuth, zero-setup) and NPX package distribution.
 
 ---
 
@@ -226,20 +227,20 @@ Quit Claude Desktop completely and relaunch it. The MCP server will connect auto
 
 ## 📊 Installation Method Comparison
 
-| Feature | Remote SSE | NPX | Local Git |
-|---------|------------|-----|-----------|
-| **Setup** | 2 minutes | 10 minutes | 15 minutes |
-| **Prerequisites** | None | Figma restart | Figma restart + git |
-| **Authentication** | OAuth (automatic) | None* (Desktop Bridge) | None* (Desktop Bridge) |
-| **Console logs** | ✅ | ✅ (zero latency) | ✅ (zero latency) |
-| **API access** | ✅ | ✅ | ✅ |
-| **Desktop Bridge plugin** | ❌ | ✅ | ✅ |
-| **AI-Assisted Design Creation** | ❌ | ✅ (via plugin) | ✅ (via plugin) |
-| **Variables (no Enterprise)** | ❌ | ✅ (via plugin, no token needed) | ✅ (via plugin, no token needed) |
-| **Library Variables (this fork)** | ❌ | ❌ (use original repo) | ✅ (100% ID resolution) |
-| **Reliable descriptions** | ⚠️ (API bugs) | ✅ (via plugin) | ✅ (via plugin) |
-| **Source code access** | ❌ | ❌ | ✅ |
-| **Distribution** | URL | npm package | git clone |
+| Feature | Remote SSE (Original) | Local Git (This Fork) |
+|---------|----------------------|----------------------|
+| **Setup** | 2 minutes | 15 minutes |
+| **Prerequisites** | None | Figma restart + git |
+| **Authentication** | OAuth (automatic) | None* (Desktop Bridge) |
+| **Console logs** | ✅ | ✅ (zero latency) |
+| **API access** | ✅ | ✅ |
+| **Desktop Bridge plugin** | ❌ | ✅ |
+| **AI-Assisted Design Creation** | ❌ | ✅ (via plugin) |
+| **Variables (no Enterprise)** | ❌ | ✅ (via plugin, no token needed) |
+| **Library Variables (100% IDs)** | ❌ | ✅ (this fork's improvement) |
+| **Reliable descriptions** | ⚠️ (API bugs) | ✅ (via plugin) |
+| **Source code access** | ❌ | ✅ |
+| **Distribution** | URL | git clone |
 
 **📖 [Complete Feature Comparison](docs/MODE_COMPARISON.md)**
 
