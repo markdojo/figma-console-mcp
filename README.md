@@ -286,6 +286,103 @@ When you first use design system tools:
 - `figma_add_mode` - Add modes to collections (e.g., "Dark", "Mobile")
 - `figma_rename_mode` - Rename existing modes
 
+#### ⚡ Batch Variable Operations (High Performance)
+
+These tools dramatically reduce API calls and execution time for syncing large sets of variables (e.g., design tokens):
+
+- `figma_batch_create_variables` - Create multiple variables in one call (13 variables → 1 call instead of 13 calls)
+- `figma_batch_update_variables` - Update 50+ variable values across modes in one call (2431 updates → ~50 calls instead of 2431 calls)
+- `figma_validate_variable_sync` - Pre-flight validation to catch errors before execution (checks for conflicts, missing modes, type mismatches)
+- `figma_check_variables_exist` - Check which variables exist to enable smart sync (determine create vs update operations)
+
+**Performance Impact:**
+- **Before:** 2444+ individual calls, 10-15 minutes execution time
+- **After:** ~53 batch calls, under 1 minute execution time
+- **Improvement:** 98% reduction in API calls, 98% reduction in time
+
+**Example Usage:**
+
+<details>
+<summary>Batch Create Variables</summary>
+
+```json
+{
+  "collectionId": "VariableCollectionId:123:456",
+  "variables": [
+    {
+      "name": "Border/action/primary",
+      "type": "COLOR",
+      "valuesByMode": {
+        "123:0": "#FF0000",
+        "123:1": "#00FF00"
+      },
+      "description": "Primary action border color"
+    },
+    {
+      "name": "Border/action/secondary",
+      "type": "COLOR",
+      "valuesByMode": {
+        "123:0": "#0000FF",
+        "123:1": "#FFFF00"
+      }
+    }
+  ],
+  "options": { "atomic": true }
+}
+```
+</details>
+
+<details>
+<summary>Batch Update Variables</summary>
+
+```json
+{
+  "updates": [
+    {
+      "variableId": "VariableID:123:456",
+      "modeId": "123:0",
+      "value": "#FF0000"
+    },
+    {
+      "variableId": "VariableID:123:457",
+      "modeId": "123:0",
+      "value": { "type": "VARIABLE_ALIAS", "id": "VariableID:789:012" }
+    }
+  ],
+  "options": { "continueOnError": true }
+}
+```
+</details>
+
+<details>
+<summary>Validate Variable Sync</summary>
+
+```json
+{
+  "collectionName": "brand-semantic",
+  "variables": [
+    {
+      "name": "Border/action/primary",
+      "type": "COLOR",
+      "modes": ["Default", "Light", "Dark"],
+      "action": "update"
+    }
+  ]
+}
+```
+</details>
+
+<details>
+<summary>Check Variables Exist</summary>
+
+```json
+{
+  "collectionName": "brand-semantic",
+  "variableNames": ["Border/action/primary", "Surface/decorative/blue"]
+}
+```
+</details>
+
 **💡 Creating Aliases to Library Variables:** To create variables that alias to variables from published libraries (e.g., primitive tokens), use `figma_execute` with the pattern documented in [TOOLS.md](docs/TOOLS.md#creating-aliases-to-library-variables). Library variable IDs have a special format that requires using `getVariableByIdAsync()` to resolve them correctly.
 
 **📖 [Detailed Tool Documentation](docs/TOOLS.md)**

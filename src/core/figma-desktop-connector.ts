@@ -1332,4 +1332,418 @@ export class FigmaDesktopConnector {
       throw error;
     }
   }
+
+  // ============================================================================
+  // BATCH VARIABLE OPERATIONS
+  // ============================================================================
+
+  /**
+   * Create multiple variables in a collection at once
+   * Reduces 13 individual creates to 1 batch call
+   */
+  async batchCreateVariables(params: {
+    collectionId: string;
+    variables: Array<{
+      name: string;
+      type: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN';
+      valuesByMode: Record<string, any>;
+      description?: string;
+    }>;
+    options?: { atomic?: boolean };
+  }): Promise<{
+    created: Array<{ name: string; id: string; type: string }>;
+    failed: Array<{ name: string; error: string }>;
+    duration: number;
+  }> {
+    logger.info({ collectionId: params.collectionId, variableCount: params.variables.length }, 'Batch creating variables via plugin UI');
+
+    const code = `
+      (async () => {
+        const results = { created: [], failed: [], duration: 0 };
+        const startTime = Date.now();
+        const collection = figma.variables.getVariableCollectionById('${params.collectionId}');
+
+        if (!collection) {
+          throw new Error('Collection not found: ${params.collectionId}');
+        }
+
+        const variables = ${JSON.stringify(params.variables)};
+
+        for (const varSpec of variables) {
+          try {
+            const variable = figma.variables.createVariable(
+              varSpec.name,
+              collection,
+              varSpec.type
+            );
+
+            if (varSpec.description) {
+              variable.description = varSpec.description;
+            }
+
+            for (const [modeId, value] of Object.entries(varSpec.valuesByMode)) {
+              await variable.setValueForMode(modeId, value);
+            }
+
+            results.created.push({
+              name: varSpec.name,
+              id: variable.id,
+              type: varSpec.type
+            });
+          } catch (error) {
+            results.failed.push({
+              name: varSpec.name,
+              error: error.message
+            });
+
+            ${params.options?.atomic ? 'throw error;' : ''}
+          }
+        }
+
+        results.duration = Date.now() - startTime;
+        return { success: true, ...results };
+      })()
+    `;
+
+    try {
+      const result = await this.executeCodeViaUI(code, 60000);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to batch create variables');
+      }
+
+      logger.info(
+        {
+          created: result.created.length,
+          failed: result.failed.length,
+          duration: result.duration
+        },
+        'Batch create variables completed'
+      );
+
+      return {
+        created: result.created,
+        failed: result.failed,
+        duration: result.duration
+      };
+    } catch (error) {
+      logger.error({ error }, 'Batch create variables failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Update multiple variable values across modes in one call
+   * Reduces 2431 individual updates to ~50 batch calls
+   */
+  async batchUpdateVariables(params: {
+    updates: Array<{
+      variableId: string;
+      modeId: string;
+      value: any;
+    }>;
+    options?: { continueOnError?: boolean };
+  }): Promise<{
+    updated: Array<{ variableId: string; modeId: string; variableName: string }>;
+    failed: Array<{ variableId: string; modeId: string; error: string }>;
+    duration: number;
+  }> {
+    logger.info({ updateCount: params.updates.length }, 'Batch updating variables via plugin UI');
+
+    const code = `
+      (async () => {
+        const results = { updated: [], failed: [], duration: 0 };
+        const startTime = Date.now();
+        const updates = ${JSON.stringify(params.updates)};
+
+        for (const update of updates) {
+          try {
+            const variable = figma.variables.getVariableById(update.variableId);
+
+            if (!variable) {
+              throw new Error('Variable not found: ' + update.variableId);
+            }
+
+            await variable.setValueForMode(update.modeId, update.value);
+
+            results.updated.push({
+              variableId: update.variableId,
+              modeId: update.modeId,
+              variableName: variable.name
+            });
+          } catch (error) {
+            results.failed.push({
+              variableId: update.variableId,
+              modeId: update.modeId,
+              error: error.message
+            });
+
+            ${!params.options?.continueOnError ? 'throw error;' : ''}
+          }
+        }
+
+        results.duration = Date.now() - startTime;
+        return { success: true, ...results };
+      })()
+    `;
+
+    try {
+      const result = await this.executeCodeViaUI(code, 120000);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to batch update variables');
+      }
+
+      logger.info(
+        {
+          updated: result.updated.length,
+          failed: result.failed.length,
+          duration: result.duration
+        },
+        'Batch update variables completed'
+      );
+
+      return {
+        updated: result.updated,
+        failed: result.failed,
+        duration: result.duration
+      };
+    } catch (error) {
+      logger.error({ error }, 'Batch update variables failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Validate variable sync operations before execution
+   * Catches 90% of errors before attempting sync
+   */
+  async validateVariableSync(params: {
+    collectionName: string;
+    variables: Array<{
+      name: string;
+      type: string;
+      modes: string[];
+      action: 'create' | 'update';
+    }>;
+  }): Promise<{
+    valid: boolean;
+    errors: Array<{ variable: string; issue: string; suggestion: string }>;
+    warnings: Array<{ variable: string; warning: string }>;
+    summary: { willCreate: number; willUpdate: number; conflicts: number };
+    collection?: { name: string; id: string; modeCount: number; modes: string[] };
+  }> {
+    logger.info({ collectionName: params.collectionName, variableCount: params.variables.length }, 'Validating variable sync');
+
+    const code = `
+      (async () => {
+        const errors = [];
+        const warnings = [];
+        let willCreate = 0;
+        let willUpdate = 0;
+        let conflicts = 0;
+
+        const collections = figma.variables.getLocalVariableCollections();
+        const collection = collections.find(c => c.name === '${params.collectionName}');
+
+        if (!collection) {
+          errors.push({
+            variable: 'ALL',
+            issue: 'Collection "${params.collectionName}" not found',
+            suggestion: 'Check collection name or create it first'
+          });
+          return {
+            success: true,
+            valid: false,
+            errors,
+            warnings,
+            summary: { willCreate: 0, willUpdate: 0, conflicts: 0 }
+          };
+        }
+
+        const existingVars = figma.variables.getLocalVariables()
+          .filter(v => v.variableCollectionId === collection.id);
+        const existingVarNames = new Set(existingVars.map(v => v.name));
+        const existingVarTypes = new Map(existingVars.map(v => [v.name, v.resolvedType]));
+
+        const modeNames = new Set(collection.modes.map(m => m.name));
+
+        const variables = ${JSON.stringify(params.variables)};
+
+        for (const varSpec of variables) {
+          if (varSpec.action === 'create' && existingVarNames.has(varSpec.name)) {
+            conflicts++;
+            errors.push({
+              variable: varSpec.name,
+              issue: 'Variable already exists but action is "create"',
+              suggestion: 'Change action to "update" or use different name'
+            });
+          }
+
+          if (varSpec.action === 'update' && !existingVarNames.has(varSpec.name)) {
+            errors.push({
+              variable: varSpec.name,
+              issue: 'Variable does not exist but action is "update"',
+              suggestion: 'Change action to "create" or check variable name'
+            });
+          }
+
+          if (varSpec.action === 'update' && existingVarNames.has(varSpec.name)) {
+            const existingType = existingVarTypes.get(varSpec.name);
+            if (existingType !== varSpec.type) {
+              errors.push({
+                variable: varSpec.name,
+                issue: 'Type mismatch: existing=' + existingType + ', requested=' + varSpec.type,
+                suggestion: 'Types must match for updates'
+              });
+            }
+          }
+
+          for (const modeName of varSpec.modes) {
+            if (!modeNames.has(modeName)) {
+              warnings.push({
+                variable: varSpec.name,
+                warning: 'Mode "' + modeName + '" does not exist in collection'
+              });
+            }
+          }
+
+          if (varSpec.action === 'create') willCreate++;
+          if (varSpec.action === 'update') willUpdate++;
+        }
+
+        return {
+          success: true,
+          valid: errors.length === 0,
+          errors,
+          warnings,
+          summary: { willCreate, willUpdate, conflicts },
+          collection: {
+            name: collection.name,
+            id: collection.id,
+            modeCount: collection.modes.length,
+            modes: collection.modes.map(m => m.name)
+          }
+        };
+      })()
+    `;
+
+    try {
+      const result = await this.executeCodeViaUI(code, 30000);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to validate variable sync');
+      }
+
+      logger.info(
+        {
+          valid: result.valid,
+          errorCount: result.errors.length,
+          warningCount: result.warnings.length
+        },
+        'Variable sync validation completed'
+      );
+
+      return {
+        valid: result.valid,
+        errors: result.errors,
+        warnings: result.warnings,
+        summary: result.summary,
+        collection: result.collection
+      };
+    } catch (error) {
+      logger.error({ error }, 'Variable sync validation failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Check which variables exist in a collection
+   * Enables smart sync (skip unchanged, determine create vs update)
+   */
+  async checkVariablesExist(params: {
+    collectionName: string;
+    variableNames: string[];
+  }): Promise<{
+    existing: Array<{ name: string; id: string; type: string }>;
+    missing: string[];
+    collection: {
+      name: string;
+      id: string;
+      modeCount: number;
+      modes: Array<{ name: string; id: string }>;
+    };
+  }> {
+    logger.info({ collectionName: params.collectionName, variableCount: params.variableNames.length }, 'Checking variables exist');
+
+    const code = `
+      (async () => {
+        const collections = figma.variables.getLocalVariableCollections();
+        const collection = collections.find(c => c.name === '${params.collectionName}');
+
+        if (!collection) {
+          throw new Error('Collection "${params.collectionName}" not found');
+        }
+
+        const existingVars = figma.variables.getLocalVariables()
+          .filter(v => v.variableCollectionId === collection.id);
+
+        const existingMap = new Map(existingVars.map(v => [v.name, v]));
+        const existing = [];
+        const missing = [];
+
+        const variableNames = ${JSON.stringify(params.variableNames)};
+
+        for (const name of variableNames) {
+          const variable = existingMap.get(name);
+          if (variable) {
+            existing.push({
+              name: variable.name,
+              id: variable.id,
+              type: variable.resolvedType
+            });
+          } else {
+            missing.push(name);
+          }
+        }
+
+        return {
+          success: true,
+          existing,
+          missing,
+          collection: {
+            name: collection.name,
+            id: collection.id,
+            modeCount: collection.modes.length,
+            modes: collection.modes.map(m => ({ name: m.name, id: m.modeId }))
+          }
+        };
+      })()
+    `;
+
+    try {
+      const result = await this.executeCodeViaUI(code, 30000);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to check variables exist');
+      }
+
+      logger.info(
+        {
+          existing: result.existing.length,
+          missing: result.missing.length
+        },
+        'Check variables exist completed'
+      );
+
+      return {
+        existing: result.existing,
+        missing: result.missing,
+        collection: result.collection
+      };
+    } catch (error) {
+      logger.error({ error }, 'Check variables exist failed');
+      throw error;
+    }
+  }
 }

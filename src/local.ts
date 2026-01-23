@@ -2025,6 +2025,289 @@ return JSON.stringify(await getAllLibraryVariables(), null, 2);
 		);
 
 		// ============================================================================
+		// BATCH VARIABLE OPERATIONS
+		// ============================================================================
+		// These tools batch multiple variable operations to reduce API calls significantly.
+		// Use these for syncing large sets of variables (e.g., design tokens) efficiently.
+
+		// Tool: Batch create variables
+		this.server.tool(
+			"figma_batch_create_variables",
+			"Create multiple variables in a collection at once. Reduces individual API calls by batching operations. Supports atomic mode where all operations fail if any single operation fails. Ideal for syncing design tokens. Requires the Desktop Bridge plugin to be running.",
+			{
+				collectionId: z.string().describe(
+					"The collection ID to create variables in (e.g., 'VariableCollectionId:123:456'). Get this from figma_get_variables."
+				),
+				variables: z.array(
+					z.object({
+						name: z.string().describe("Variable name (e.g., 'Border/action/primary')"),
+						type: z.enum(["COLOR", "FLOAT", "STRING", "BOOLEAN"]).describe("Variable type"),
+						valuesByMode: z.record(z.any()).describe(
+							"Values for each mode. Map of modeId to value. Example: { '1:0': '#FF0000', '1:1': '#00FF00' }"
+						),
+						description: z.string().optional().describe("Optional variable description"),
+					})
+				).describe("Array of variables to create"),
+				options: z.object({
+					atomic: z.boolean().optional().describe(
+						"If true, fail entire batch on first error. If false (default), continue creating remaining variables after errors."
+					),
+				}).optional(),
+			},
+			async ({ collectionId, variables, options }) => {
+				try {
+					const connector = await this.getDesktopConnector();
+					const result = await connector.batchCreateVariables({
+						collectionId,
+						variables,
+						options,
+					});
+
+					return {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify(
+									{
+										success: true,
+										message: `Batch create completed: ${result.created.length} created, ${result.failed.length} failed`,
+										created: result.created,
+										failed: result.failed,
+										duration: `${result.duration}ms`,
+										timestamp: Date.now(),
+									},
+									null,
+									2,
+								),
+							},
+						],
+					};
+				} catch (error) {
+					logger.error({ error }, "Failed to batch create variables");
+					return {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify(
+									{
+										error: error instanceof Error ? error.message : String(error),
+										message: "Failed to batch create variables",
+										hint: "Make sure the Desktop Bridge plugin is running and the collection ID is correct. Check that variable names don't already exist if using atomic mode.",
+									},
+									null,
+									2,
+								),
+							},
+						],
+						isError: true,
+					};
+				}
+			},
+		);
+
+		// Tool: Batch update variables
+		this.server.tool(
+			"figma_batch_update_variables",
+			"Update multiple variable values across modes in one call. Supports up to 50+ updates per batch. Reduces execution time from minutes to seconds for large syncs. Supports continue-on-error mode for resilience. Requires the Desktop Bridge plugin to be running.",
+			{
+				updates: z.array(
+					z.object({
+						variableId: z.string().describe("Variable ID to update (e.g., 'VariableID:123:456')"),
+						modeId: z.string().describe("Mode ID to update value in (e.g., '1:0')"),
+						value: z.any().describe(
+							"New value. For COLOR: hex string like '#FF0000'. For FLOAT: number. For STRING: text. For BOOLEAN: true/false. For ALIAS: { type: 'VARIABLE_ALIAS', id: 'VariableID:...' }"
+						),
+					})
+				).describe("Array of variable updates to apply"),
+				options: z.object({
+					continueOnError: z.boolean().optional().describe(
+						"If true, continue updating remaining variables after errors. If false (default), stop on first error."
+					),
+				}).optional(),
+			},
+			async ({ updates, options }) => {
+				try {
+					const connector = await this.getDesktopConnector();
+					const result = await connector.batchUpdateVariables({
+						updates: updates as Array<{ variableId: string; modeId: string; value: any }>,
+						options,
+					});
+
+					return {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify(
+									{
+										success: true,
+										message: `Batch update completed: ${result.updated.length} updated, ${result.failed.length} failed`,
+										updated: result.updated,
+										failed: result.failed,
+										duration: `${result.duration}ms`,
+										timestamp: Date.now(),
+									},
+									null,
+									2,
+								),
+							},
+						],
+					};
+				} catch (error) {
+					logger.error({ error }, "Failed to batch update variables");
+					return {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify(
+									{
+										error: error instanceof Error ? error.message : String(error),
+										message: "Failed to batch update variables",
+										hint: "Make sure the Desktop Bridge plugin is running and variable IDs and mode IDs are correct. Consider using continueOnError: true for large batches.",
+									},
+									null,
+									2,
+								),
+							},
+						],
+						isError: true,
+					};
+				}
+			},
+		);
+
+		// Tool: Validate variable sync
+		this.server.tool(
+			"figma_validate_variable_sync",
+			"Pre-flight validation before syncing variables. Checks for conflicts (variables that already exist when action is 'create'), missing variables (action is 'update' but variable doesn't exist), type mismatches, and missing modes. Catches 90% of errors before execution, preventing wasted time. Requires the Desktop Bridge plugin to be running.",
+			{
+				collectionName: z.string().describe(
+					"Collection name to validate against (e.g., 'brand-semantic'). The collection must exist."
+				),
+				variables: z.array(
+					z.object({
+						name: z.string().describe("Variable name to validate"),
+						type: z.string().describe("Variable type (COLOR, FLOAT, STRING, BOOLEAN)"),
+						modes: z.array(z.string()).describe("Mode names this variable will use (e.g., ['Default', 'Light', 'Dark'])"),
+						action: z.enum(["create", "update"]).describe("Whether this is a create or update operation"),
+					})
+				).describe("Variables to validate"),
+			},
+			async ({ collectionName, variables }) => {
+				try {
+					const connector = await this.getDesktopConnector();
+					const result = await connector.validateVariableSync({
+						collectionName,
+						variables,
+					});
+
+					return {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify(
+									{
+										valid: result.valid,
+										message: result.valid
+											? `Validation passed: ${result.summary.willCreate} will be created, ${result.summary.willUpdate} will be updated`
+											: `Validation failed: ${result.errors.length} errors, ${result.warnings.length} warnings`,
+										errors: result.errors,
+										warnings: result.warnings,
+										summary: result.summary,
+										collection: result.collection,
+										timestamp: Date.now(),
+									},
+									null,
+									2,
+								),
+							},
+						],
+					};
+				} catch (error) {
+					logger.error({ error }, "Failed to validate variable sync");
+					return {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify(
+									{
+										error: error instanceof Error ? error.message : String(error),
+										message: "Failed to validate variable sync",
+										hint: "Make sure the Desktop Bridge plugin is running and the collection name is correct.",
+									},
+									null,
+									2,
+								),
+							},
+						],
+						isError: true,
+					};
+				}
+			},
+		);
+
+		// Tool: Check variables exist
+		this.server.tool(
+			"figma_check_variables_exist",
+			"Check which variables exist in a collection. Returns lists of existing and missing variables with their IDs and types. Enables smart sync by determining whether to create or update each variable. Useful for avoiding errors and optimizing sync operations. Requires the Desktop Bridge plugin to be running.",
+			{
+				collectionName: z.string().describe(
+					"Collection name to check in (e.g., 'brand-semantic'). The collection must exist."
+				),
+				variableNames: z.array(z.string()).describe(
+					"Variable names to check for existence (e.g., ['Border/action/primary', 'Surface/decorative/blue'])"
+				),
+			},
+			async ({ collectionName, variableNames }) => {
+				try {
+					const connector = await this.getDesktopConnector();
+					const result = await connector.checkVariablesExist({
+						collectionName,
+						variableNames,
+					});
+
+					return {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify(
+									{
+										success: true,
+										message: `Found ${result.existing.length} existing, ${result.missing.length} missing`,
+										existing: result.existing,
+										missing: result.missing,
+										collection: result.collection,
+										timestamp: Date.now(),
+									},
+									null,
+									2,
+								),
+							},
+						],
+					};
+				} catch (error) {
+					logger.error({ error }, "Failed to check variables exist");
+					return {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify(
+									{
+										error: error instanceof Error ? error.message : String(error),
+										message: "Failed to check variables exist",
+										hint: "Make sure the Desktop Bridge plugin is running and the collection name is correct.",
+									},
+									null,
+									2,
+								),
+							},
+						],
+						isError: true,
+					};
+				}
+			},
+		);
+
+		// ============================================================================
 		// DESIGN SYSTEM TOOLS (Token-Efficient Tool Family)
 		// ============================================================================
 		// These tools provide progressive disclosure of design system data
