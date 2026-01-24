@@ -1,11 +1,11 @@
 # Figma Console MCP Server
 
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io/)
+[![npm](https://img.shields.io/npm/v/figma-console-mcp)](https://www.npmjs.com/package/figma-console-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation](https://img.shields.io/badge/docs-docs.figma--console--mcp.southleft.com-0D9488)](https://docs.figma-console-mcp.southleft.com)
 
-> **Fork with enhanced library variable support** - This fork focuses on **Local Mode** improvements, specifically 100% reliable ID resolution for library variables. For **Remote Mode** (Cloudflare Workers), use the [original repository](https://github.com/southleft/figma-console-mcp).
-
-> **Model Context Protocol server** that provides AI assistants with **real-time console access, visual debugging, design system extraction, and design creation** for Figma.
+> **Your design system as an API.** Model Context Protocol server that bridges design and development—giving AI assistants complete access to Figma for **extraction**, **creation**, and **debugging**.
 
 ## What is this?
 
@@ -17,53 +17,149 @@ Figma Console MCP connects AI assistants (like Claude) to Figma, enabling:
 - **✏️ Design creation** - Create UI components, frames, and layouts directly in Figma
 - **🔧 Variable management** - Create, update, rename, and delete design tokens
 - **⚡ Real-time monitoring** - Watch logs as plugins execute
-- **🔄 Local Mode with enhanced library variables** - This fork focuses on Local Git installation with improved library variable support
+- **🔄 Three ways to install** - Remote SSE (OAuth, zero-setup), NPX (npm package), or Local Git (source code)
 
 ---
 
 ## ⚡ Quick Start
 
-> **⚠️ Important:** This fork's improvements (100% reliable library variable ID resolution) **only work in Local Mode**. For Remote Mode (Cloudflare Workers/SSE), use the [original repository](https://github.com/southleft/figma-console-mcp).
-
 ### Choose Your Installation Method
 
-This fork supports **Local Mode only** with enhanced library variable support:
+This MCP server offers **three installation methods** with different tradeoffs:
 
 | Method | Setup | Auth | Best For |
 |--------|-------|------|----------|
-| **[Local Git](#for-plugin-developers-local-mode)** | git clone (15 min) | None* | ✅ **This fork - Enhanced library variables** |
+| **[Remote SSE](#for-most-users-remote-mode-zero-setup)** | ⭐ Paste URL (2 min) | OAuth (automatic) | Most users - design system extraction |
+| **[NPX](#npx-alternative-package-distribution)** | npm package (10 min) | PAT (manual) | Local execution without source code |
+| **[Local Git](#for-plugin-developers-local-mode)** | git clone (15 min) | PAT (manual) | Developers - modify source code |
 
-*No API token needed for `figma_get_library_variables` (uses Desktop Bridge plugin)
+**Key Insight:** Only Remote SSE offers true zero-setup via OAuth. Both NPX and Local Git require manual `FIGMA_ACCESS_TOKEN` setup.
 
-**For Remote Mode or NPX:** Use the [original repository](https://github.com/southleft/figma-console-mcp) which provides Remote SSE (OAuth, zero-setup) and NPX package distribution.
+Choose the setup that fits your needs:
+
+### For Most Users: Remote Mode (Zero Setup)
+
+Perfect for design system extraction and basic debugging. No installation required!
+
+#### Claude Desktop (Recommended)
+
+**Latest Method - No Config Files!**
+
+1. Open Claude Desktop → **Settings** → **Connectors**
+2. Click **"Add Custom Connector"**
+3. Enter:
+   - **Name:** `Figma Console`
+   - **URL:** `https://figma-console-mcp.southleft.com/sse`
+4. Click **"Add"**
+5. Done! ✅
+
+**What you get:**
+- ✅ Figma tools available immediately
+- ✅ OAuth authentication (automatic when you first use API tools)
+- ✅ Design system extraction (variables*, components, styles)
+- ✅ Console debugging and screenshots
+- ❌ Desktop Bridge plugin NOT available (use Local Mode for that)
+
+*Variables API requires Figma Enterprise plan OR use Local Mode + Desktop Bridge plugin
 
 ---
 
-### For Plugin Developers: Local Mode (This Fork)
+#### Claude Code
 
-**This fork is optimized for Local Mode** with enhanced library variable support:
+One-line install:
 
-**Use this fork if you:**
-- ✅ Need **100% reliable ID resolution for library variables** (this fork's main improvement)
-- ✅ Are creating aliases to library variables and need reliable IDs
-- ✅ Are developing Figma plugins (need zero-latency console debugging)
-- ✅ Need variables WITHOUT Enterprise plan (via Desktop Bridge plugin)
-- ✅ Need reliable component descriptions (Figma API has bugs, plugin bypasses them)
-- ✅ Want direct access to Figma Desktop state
+```bash
+claude mcp add --transport sse figma-console https://figma-console-mcp.southleft.com/sse
+```
 
-**⚠️ Important:** The **Desktop Bridge plugin ONLY works in Local Mode**. Remote mode cannot access it because the plugin requires direct connection to Figma Desktop via `localhost:9222`.
-
-**Setup time:** 10-15 minutes
+Verify: `/mcp` should show "figma-console: connected"
 
 ---
 
-### For Plugin Developers: Local Mode (This Fork)
+#### Cursor
 
-**This fork is optimized for Local Mode with enhanced library variable support:**
+Add to `.cursor/mcp.json`:
 
-**Use this fork if you:**
-- ✅ Need **100% reliable ID resolution for library variables** (this fork's main improvement)
-- ✅ Are creating aliases to library variables and need reliable IDs
+```json
+{
+  "mcpServers": {
+    "figma-console": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://figma-console-mcp.southleft.com/sse"]
+    }
+  }
+}
+```
+
+Restart Cursor after saving.
+
+---
+
+<details>
+<summary><b>Other MCP Clients (Windsurf, Zed, etc.)</b></summary>
+
+Consult your client's MCP documentation for the config file location, then add:
+
+```json
+{
+  "mcpServers": {
+    "figma-console": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://figma-console-mcp.southleft.com/sse"]
+    }
+  }
+}
+```
+
+</details>
+
+---
+
+### NPX: Alternative Package Distribution
+
+**Use NPX if you:**
+- ✅ Want local execution without cloning source code
+- ✅ Need Desktop Bridge plugin features
+- ✅ Prefer npm package distribution over git
+- ⚠️ Are comfortable with manual `FIGMA_ACCESS_TOKEN` setup
+
+**Setup time:** 10 minutes
+
+**Note:** NPX has **identical authentication requirements** to Local Git mode. For true zero-setup, use [Remote Mode](#for-most-users-remote-mode-zero-setup) instead.
+
+#### Configuration
+
+Add to your MCP config (e.g., `.claude.json` or `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "figma-console": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "figma-console-mcp@latest"],
+      "env": {
+        "FIGMA_ACCESS_TOKEN": "your_figma_access_token_here"
+      }
+    }
+  }
+}
+```
+
+#### Prerequisites
+
+- Get **Figma Personal Access Token**: https://www.figma.com/developers/api#access-tokens
+- Restart Figma Desktop with `--remote-debugging-port=9222`
+  - **macOS:** `open -a "Figma" --args --remote-debugging-port=9222`
+  - **Windows:** `cmd /c "%LOCALAPPDATA%\Figma\Figma.exe" --remote-debugging-port=9222`
+
+**📖 [Complete NPX Setup Guide](docs/NPX-INSTALLATION.md)**
+
+---
+
+### For Plugin Developers: Local Mode
+
+**Use Local Mode if you:**
 - ✅ Are developing Figma plugins (need zero-latency console debugging)
 - ✅ Need variables WITHOUT Enterprise plan (via Desktop Bridge plugin)
 - ✅ Need reliable component descriptions (Figma API has bugs, plugin bypasses them)
@@ -83,7 +179,7 @@ This fork supports **Local Mode only** with enhanced library variable support:
 
 ```bash
 # Clone the repository
-git clone https://github.com/markdojo/figma-console-mcp.git
+git clone https://github.com/southleft/figma-console-mcp.git
 cd figma-console-mcp
 
 # Install dependencies
@@ -93,32 +189,20 @@ npm install
 npm run build:local
 ```
 
-#### Step 2: Configure Claude Desktop
+#### Step 2: Get Figma Personal Access Token
 
-> **💡 No API Token Required!** The `figma_get_library_variables` tool (this fork's main improvement) uses the Desktop Bridge plugin and **does NOT require a Figma API token**. However, if you want to use other tools that access Figma files via URL (like `figma_get_variables`), you'll need a token. See [Optional: Get API Token](#optional-step-get-figma-api-token) below.
+1. Visit https://www.figma.com/developers/api#access-tokens
+2. Click "Get personal access token"
+3. Enter description: "Figma Console MCP Local"
+4. Click "Generate token"
+5. **Copy the token** (you won't see it again!)
+
+#### Step 3: Configure Claude Desktop
 
 **macOS:** Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows:** Edit `%APPDATA%\Claude\claude_desktop_config.json`
 
 Add this configuration:
-
-```json
-{
-  "mcpServers": {
-    "figma-console-local": {
-      "command": "node",
-      "args": ["/absolute/path/to/figma-console-mcp/dist/local.js"]
-    }
-  }
-}
-```
-
-**Important:**
-- Replace `/absolute/path/to/figma-console-mcp` with the actual absolute path where you cloned the repo
-- Use forward slashes `/` even on Windows
-- **No API token needed** for `figma_get_library_variables` (uses Desktop Bridge plugin)
-
-**Optional:** Only needed for REST API tools (like `figma_get_variables` for remote files). Your main tool `figma_get_library_variables` works without a token. If you need REST API access, add:
 
 ```json
 {
@@ -134,7 +218,12 @@ Add this configuration:
 }
 ```
 
-#### Step 3: Launch Figma Desktop with Remote Debugging
+**Important:**
+- Replace `/absolute/path/to/figma-console-mcp` with the actual absolute path where you cloned the repo
+- Replace `figd_YOUR_TOKEN_HERE` with your actual Figma token from Step 2
+- Use forward slashes `/` even on Windows
+
+#### Step 4: Launch Figma Desktop with Remote Debugging
 
 **⚠️ CRITICAL:** Quit Figma completely first, then restart it with the debug flag:
 
@@ -148,11 +237,11 @@ open -a "Figma" --args --remote-debugging-port=9222
 cmd /c "%LOCALAPPDATA%\Figma\Figma.exe" --remote-debugging-port=9222
 ```
 
-#### Step 4: Restart Claude Desktop
+#### Step 5: Restart Claude Desktop
 
 Quit Claude Desktop completely and relaunch it. The MCP server will connect automatically.
 
-#### Step 5: Verify Setup
+#### Step 6: Verify Setup
 
 1. **Check debug port is working:**
    - Open Chrome browser
@@ -166,42 +255,23 @@ Quit Claude Desktop completely and relaunch it. The MCP server will connect auto
 
 **📖 For more details:** See [Complete Setup Guide](docs/SETUP.md)
 
-#### Optional: Figma API Token (Only for REST API Tools)
-
-**⚠️ Not needed for `figma_get_library_variables`!** This fork's main feature uses Desktop Bridge plugin (no token required).
-
-**Only add a token if you want to use REST API tools** like:
-- `figma_get_variables` (for accessing files via URL)
-- `figma_get_file_data` (for remote file access)
-- `figma_get_component` (for remote component access)
-
-**To add token (optional):**
-1. Visit https://www.figma.com/developers/api#access-tokens
-2. Generate a token
-3. Add it to your Claude Desktop config as shown in Step 2 above
-
----
-
-> **💡 For Remote Mode (Cloudflare Workers/SSE):** This fork's improvements only work in Local Mode. For Remote Mode with OAuth, use the [original repository](https://github.com/southleft/figma-console-mcp).
-
 ---
 
 ## 📊 Installation Method Comparison
 
-| Feature | Remote SSE (Original) | Local Git (This Fork) |
-|---------|----------------------|----------------------|
-| **Setup** | 2 minutes | 15 minutes |
-| **Prerequisites** | None | Figma restart + git |
-| **Authentication** | OAuth (automatic) | None* (Desktop Bridge) |
-| **Console logs** | ✅ | ✅ (zero latency) |
-| **API access** | ✅ | ✅ |
-| **Desktop Bridge plugin** | ❌ | ✅ |
-| **AI-Assisted Design Creation** | ❌ | ✅ (via plugin) |
-| **Variables (no Enterprise)** | ❌ | ✅ (via plugin, no token needed) |
-| **Library Variables (100% IDs)** | ❌ | ✅ (this fork's improvement) |
-| **Reliable descriptions** | ⚠️ (API bugs) | ✅ (via plugin) |
-| **Source code access** | ❌ | ✅ |
-| **Distribution** | URL | git clone |
+| Feature | Remote SSE | NPX | Local Git |
+|---------|------------|-----|-----------|
+| **Setup** | 2 minutes | 10 minutes | 15 minutes |
+| **Prerequisites** | None | PAT + Figma restart | PAT + Figma restart + git |
+| **Authentication** | OAuth (automatic) | PAT (manual) | PAT (manual) |
+| **Console logs** | ✅ | ✅ (zero latency) | ✅ (zero latency) |
+| **API access** | ✅ | ✅ | ✅ |
+| **Desktop Bridge plugin** | ❌ | ✅ | ✅ |
+| **AI-Assisted Design Creation** | ❌ | ✅ (via plugin) | ✅ (via plugin) |
+| **Variables (no Enterprise)** | ❌ | ✅ (via plugin) | ✅ (via plugin) |
+| **Reliable descriptions** | ⚠️ (API bugs) | ✅ (via plugin) | ✅ (via plugin) |
+| **Source code access** | ❌ | ❌ | ✅ |
+| **Distribution** | URL | npm package | git clone |
 
 **📖 [Complete Feature Comparison](docs/MODE_COMPARISON.md)**
 
@@ -275,6 +345,17 @@ When you first use design system tools:
   - Create frames, shapes, text, components
   - Apply auto-layout, styles, effects
   - Build complete UI mockups programmatically
+- `figma_arrange_component_set` - **Organize variants into professional component sets**
+  - Convert multiple component variants into a proper Figma component set
+  - Applies native purple dashed border visualization automatically
+  - Creates white container frame with title, row labels, and column headers
+  - Row labels vertically centered with each grid row
+  - Column headers horizontally centered with each column
+  - Use natural language like "arrange these variants" or "organize as component set"
+- `figma_set_description` - **Document components with rich descriptions**
+  - Add descriptions to components, component sets, and styles
+  - Supports markdown formatting for rich documentation
+  - Descriptions appear in Dev Mode for developers
 
 ### 🔧 Variable Management (Local Mode + Desktop Bridge)
 - `figma_create_variable_collection` - Create new variable collections with modes
@@ -285,105 +366,6 @@ When you first use design system tools:
 - `figma_delete_variable_collection` - Delete collections and all their variables
 - `figma_add_mode` - Add modes to collections (e.g., "Dark", "Mobile")
 - `figma_rename_mode` - Rename existing modes
-
-#### ⚡ Batch Variable Operations (High Performance)
-
-These tools dramatically reduce API calls and execution time for syncing large sets of variables (e.g., design tokens):
-
-- `figma_batch_create_variables` - Create multiple variables in one call (13 variables → 1 call instead of 13 calls)
-- `figma_batch_update_variables` - Update 50+ variable values across modes in one call (2431 updates → ~50 calls instead of 2431 calls)
-- `figma_validate_variable_sync` - Pre-flight validation to catch errors before execution (checks for conflicts, missing modes, type mismatches)
-- `figma_check_variables_exist` - Check which variables exist to enable smart sync (determine create vs update operations)
-
-**Performance Impact:**
-- **Before:** 2444+ individual calls, 10-15 minutes execution time
-- **After:** ~53 batch calls, under 1 minute execution time
-- **Improvement:** 98% reduction in API calls, 98% reduction in time
-
-**Example Usage:**
-
-<details>
-<summary>Batch Create Variables</summary>
-
-```json
-{
-  "collectionId": "VariableCollectionId:123:456",
-  "variables": [
-    {
-      "name": "Border/action/primary",
-      "type": "COLOR",
-      "valuesByMode": {
-        "123:0": "#FF0000",
-        "123:1": "#00FF00"
-      },
-      "description": "Primary action border color"
-    },
-    {
-      "name": "Border/action/secondary",
-      "type": "COLOR",
-      "valuesByMode": {
-        "123:0": "#0000FF",
-        "123:1": "#FFFF00"
-      }
-    }
-  ],
-  "options": { "atomic": true }
-}
-```
-</details>
-
-<details>
-<summary>Batch Update Variables</summary>
-
-```json
-{
-  "updates": [
-    {
-      "variableId": "VariableID:123:456",
-      "modeId": "123:0",
-      "value": "#FF0000"
-    },
-    {
-      "variableId": "VariableID:123:457",
-      "modeId": "123:0",
-      "value": { "type": "VARIABLE_ALIAS", "id": "VariableID:789:012" }
-    }
-  ],
-  "options": { "continueOnError": true }
-}
-```
-</details>
-
-<details>
-<summary>Validate Variable Sync</summary>
-
-```json
-{
-  "collectionName": "brand-semantic",
-  "variables": [
-    {
-      "name": "Border/action/primary",
-      "type": "COLOR",
-      "modes": ["Default", "Light", "Dark"],
-      "action": "update"
-    }
-  ]
-}
-```
-</details>
-
-<details>
-<summary>Check Variables Exist</summary>
-
-```json
-{
-  "collectionName": "brand-semantic",
-  "variableNames": ["Border/action/primary", "Surface/decorative/blue"]
-}
-```
-</details>
-
-**💡 Creating Aliases to Library Variables:** To create variables that alias to variables from published libraries (e.g., primitive tokens), use `figma_execute` with the pattern documented in [TOOLS.md](docs/TOOLS.md#creating-aliases-to-library-variables). Library variable IDs have a special format that requires using `getVariableByIdAsync()` to resolve them correctly.
 
 **📖 [Detailed Tool Documentation](docs/TOOLS.md)**
 
@@ -412,6 +394,8 @@ Create a success notification card with a checkmark icon and message
 Design a button component with hover and disabled states
 Build a navigation bar with logo, menu items, and user avatar
 Create a modal dialog with header, content area, and action buttons
+Arrange these button variants into a component set
+Organize my icon variants as a proper component set with the purple border
 ```
 
 ### Variable Management (Local Mode)
@@ -525,7 +509,7 @@ The **Figma Desktop Bridge** plugin enables powerful capabilities:
 
 **Setup:**
 1. Install Local Mode MCP
-2. Download plugin from [Releases](https://github.com/markdojo/figma-console-mcp/releases/latest)
+2. Download plugin from [Releases](https://github.com/southleft/figma-console-mcp/releases/latest)
 3. Import plugin: Figma Desktop → Plugins → Development → Import plugin from manifest
 4. Run plugin in your Figma file
 5. Ask Claude: "Create a button component" or "Show me the design variables"
@@ -564,11 +548,19 @@ The **Figma Desktop Bridge** plugin enables powerful capabilities:
 
 ## 🛤️ Roadmap
 
-- [ ] **Real-time collaboration** - Multi-user debugging sessions
-- [ ] **Component screenshot diffs** - Visual regression testing
-- [ ] **Batch operations** - Process multiple files at once
-- [ ] **Design linting** - Automated compliance checks
-- [ ] **Plugin template generation** - Generate plugin boilerplate
+**Current Status:** v1.2.x (Stable) - Production-ready with comprehensive capabilities
+
+**Coming Soon:**
+- [ ] **Enhanced error messages** - Actionable suggestions for design operations
+- [ ] **Component template library** - Common UI pattern generation
+- [ ] **Batch variant operations** - Create multiple variants efficiently
+- [ ] **Visual regression testing** - Screenshot diff capabilities
+
+**Future:**
+- [ ] **Multi-user debugging** - Collaborative debugging sessions
+- [ ] **Design linting** - Automated compliance and accessibility checks
+- [ ] **VS Code extension** - Simplified setup and integration
+- [ ] **AI enhancements** - Intelligent component suggestions and auto-layout optimization
 
 **📖 [Full Roadmap](docs/ROADMAP.md)**
 
@@ -577,7 +569,7 @@ The **Figma Desktop Bridge** plugin enables powerful capabilities:
 ## 💻 Development
 
 ```bash
-git clone https://github.com/markdojo/figma-console-mcp.git
+git clone https://github.com/southleft/figma-console-mcp.git
 cd figma-console-mcp
 npm install
 
@@ -603,38 +595,9 @@ MIT - See [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 
-- 📖 [Full Documentation](docs/)
-- 🐛 [Report Issues](https://github.com/markdojo/figma-console-mcp/issues)
-- 💬 [Discussions](https://github.com/markdojo/figma-console-mcp/discussions)
-
----
-
-## 🙏 Credits & Acknowledgments
-
-This project is a fork of [figma-console-mcp](https://github.com/southleft/figma-console-mcp) by [southleft](https://github.com/southleft).
-
-### When to Use This Fork vs Original
-
-**Use this fork if:**
-- ✅ You need **Local Mode** with enhanced library variable support
-- ✅ You're creating aliases to library variables and need 100% reliable IDs
-- ✅ You're developing plugins and need the Desktop Bridge plugin features
-
-**Use the [original repository](https://github.com/southleft/figma-console-mcp) if:**
-- ✅ You need **Remote Mode** (Cloudflare Workers/SSE with OAuth)
-- ✅ You want zero-setup via Remote SSE endpoint
-- ✅ You don't need the enhanced library variable features
-
-**Original Project:**
-- Repository: https://github.com/southleft/figma-console-mcp
-- License: MIT
-
-**Improvements in this fork:**
-- ✅ 100% reliable ID resolution for library variables via `importVariableByKeyAsync`
-- ✅ Enhanced method tracking and summary statistics
-- ✅ Removed ineffective code paths for cleaner implementation
-- ⚠️ **Local Mode only** - Remote Mode improvements not included
-
-We're grateful to the original maintainers for building this excellent MCP server!
+- 📚 **[Documentation Site](https://docs.figma-console-mcp.southleft.com)** — Complete guides, tutorials, and API reference
+- 📖 [Local Docs](docs/) — Documentation source files
+- 🐛 [Report Issues](https://github.com/southleft/figma-console-mcp/issues)
+- 💬 [Discussions](https://github.com/southleft/figma-console-mcp/discussions)
 - 🌐 [Model Context Protocol](https://modelcontextprotocol.io/)
 - 🎨 [Figma API](https://www.figma.com/developers/api)

@@ -53,10 +53,13 @@ class LocalFigmaConsoleMCP {
 	}> = new Map();
 
 	constructor() {
-		this.server = new McpServer({
-			name: "Figma Console MCP (Local)",
-			version: "0.1.0",
-			instructions: `## Figma Console MCP - Visual Design Workflow
+		this.server = new McpServer(
+			{
+				name: "Figma Console MCP (Local)",
+				version: "0.1.0",
+			},
+			{
+				instructions: `## Figma Console MCP - Visual Design Workflow
 
 This MCP server enables AI-assisted design creation in Figma. Follow these mandatory workflows:
 
@@ -81,8 +84,37 @@ After creating or modifying ANY visual design elements:
 - Elements using "hug contents" instead of "fill container" (causes lopsided layouts)
 - Inconsistent padding (elements not visually balanced)
 - Text/inputs not filling available width
-- Items not centered properly in their containers`,
-		});
+- Items not centered properly in their containers
+- Components floating on blank canvas - always place within a Section or Frame
+
+### COMPONENT PLACEMENT (REQUIRED)
+Before creating ANY component, check for or create a proper parent container:
+1. First, check if a Section or Frame already exists on the current page
+2. If no container exists, create a Section first (e.g., "Design Components")
+3. Place all new components INSIDE the Section/Frame, not on blank canvas
+4. This keeps designs organized and prevents "floating" components
+
+Example pattern:
+\`\`\`javascript
+// Find or create a Section for components
+let section = figma.currentPage.findOne(n => n.type === 'SECTION' && n.name === 'Components');
+if (!section) {
+  section = figma.createSection();
+  section.name = 'Components';
+  section.x = 0;
+  section.y = 0;
+}
+// Now create your component INSIDE the section
+const frame = figma.createFrame();
+section.appendChild(frame);
+\`\`\`
+
+### DESIGN BEST PRACTICES
+For component-specific design guidance (sizing, proportions, accessibility, etc.), query the Design Systems Assistant MCP which provides up-to-date best practices for any component type.
+
+If Design Systems Assistant MCP is not available, install it from: https://github.com/southleft/design-systems-mcp`,
+			}
+		);
 	}
 
 	/**
@@ -511,23 +543,37 @@ Pass a nodeId to screenshot specific frames/elements, or omit to capture the cur
 						);
 					}
 
+					// Fetch the image and convert to base64 so Claude can actually see it
+					logger.info({ imageUrl }, "Fetching image from Figma S3 URL");
+					const imageResponse = await fetch(imageUrl);
+					if (!imageResponse.ok) {
+						throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+					}
+
+					const imageBuffer = await imageResponse.arrayBuffer();
+					const base64Data = Buffer.from(imageBuffer).toString('base64');
+					const mimeType = format === 'jpg' ? 'image/jpeg' : format === 'svg' ? 'image/svg+xml' : format === 'pdf' ? 'application/pdf' : 'image/png';
+
+					logger.info({ byteLength: imageBuffer.byteLength, mimeType }, "Image fetched and converted to base64");
+
+					// Return as MCP image content type so Claude can actually see the image
 					return {
 						content: [
 							{
 								type: "text",
-								text: JSON.stringify(
-									{
-										fileKey,
-										nodeId: targetNodeId,
-										imageUrl,
-										scale,
-										format,
-										expiresIn: "30 days",
-										note: "Image URL provided above. Use this URL to view or download the screenshot. URLs expire after 30 days.",
-									},
-									null,
-									2
-								),
+								text: JSON.stringify({
+									fileKey,
+									nodeId: targetNodeId,
+									scale,
+									format,
+									byteLength: imageBuffer.byteLength,
+									note: "Screenshot captured successfully. The image is included below for visual analysis.",
+								}, null, 2),
+							},
+							{
+								type: "image",
+								data: base64Data,
+								mimeType: mimeType,
 							},
 						],
 					};
@@ -1103,7 +1149,35 @@ Common issues to check:
 - Inconsistent padding (elements not visually balanced)
 - Text/inputs not filling available width
 - Component text not changing (use figma_set_instance_properties instead)
-- Duplicate pages created (check before creating new pages)`,
+- Duplicate pages created (check before creating new pages)
+- Components on blank canvas - ALWAYS create inside a Section or Frame
+
+**COMPONENT PLACEMENT (REQUIRED):**
+Before creating components, find or create a parent Section:
+\`\`\`javascript
+let section = figma.currentPage.findOne(n => n.type === 'SECTION');
+if (!section) {
+  section = figma.createSection();
+  section.name = 'Components';
+}
+// Create component INSIDE the section
+section.appendChild(newComponent);
+\`\`\`
+
+**Z-ORDER / LAYER ORDERING:**
+When creating background frames or containers, newly created elements render on TOP by default. To put backgrounds behind content:
+\`\`\`javascript
+// Option 1: Insert at index 0 (back)
+parent.insertChild(0, backgroundFrame);
+// Option 2: Create background FIRST, then content
+const bg = figma.createFrame(); // created first = behind
+const content = figma.createFrame(); // created second = in front
+\`\`\`
+
+**DESIGN BEST PRACTICES:**
+For component-specific design guidance (sizing, proportions, accessibility, variants, properties, metadata), query the Design Systems Assistant MCP before creating any component. It provides up-to-date best practices for any component type (buttons, tabs, accordions, badges, etc.).
+
+If Design Systems Assistant MCP is not available, install it from: https://github.com/southleft/design-systems-mcp`,
 			{
 				code: z.string().describe(
 					"JavaScript code to execute. Has access to the 'figma' global object. " +
@@ -1562,7 +1636,7 @@ return JSON.stringify(await getAllLibraryVariables(), null, 2);
 				modeId: z.string().describe(
 					"The mode ID to update the value in (e.g., '1:0'). Get this from the variable's collection modes."
 				),
-				value: z.any().describe(
+				value: z.union([z.string(), z.number(), z.boolean()]).describe(
 					"The new value. For COLOR: hex string like '#FF0000'. For FLOAT: number. For STRING: text. For BOOLEAN: true/false."
 				),
 			},
@@ -1624,7 +1698,7 @@ return JSON.stringify(await getAllLibraryVariables(), null, 2);
 					"The variable type: COLOR, FLOAT, STRING, or BOOLEAN"
 				),
 				description: z.string().optional().describe("Optional description for the variable"),
-				valuesByMode: z.record(z.any()).optional().describe(
+				valuesByMode: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe(
 					"Optional initial values by mode ID. Example: { '1:0': '#FF0000', '1:1': '#0000FF' }"
 				),
 			},
@@ -2910,7 +2984,7 @@ After instantiating components, use figma_take_screenshot to verify the result l
 				variant: z.record(z.string()).optional().describe(
 					"Variant properties to set (e.g., { Type: 'Simple', State: 'Active' })"
 				),
-				overrides: z.record(z.any()).optional().describe(
+				overrides: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe(
 					"Property overrides (e.g., { 'Button Label': 'Click Me' })"
 				),
 				position: z.object({
@@ -3049,7 +3123,7 @@ After instantiating components, use figma_take_screenshot to verify the result l
 				type: z.enum(["BOOLEAN", "TEXT", "INSTANCE_SWAP", "VARIANT"]).describe(
 					"Property type: BOOLEAN for toggles, TEXT for strings, INSTANCE_SWAP for component swaps, VARIANT for variant selection"
 				),
-				defaultValue: z.any().describe(
+				defaultValue: z.union([z.string(), z.number(), z.boolean()]).describe(
 					"Default value for the property. BOOLEAN: true/false, TEXT: string, INSTANCE_SWAP: component key, VARIANT: variant value"
 				),
 			},
@@ -3102,8 +3176,11 @@ After instantiating components, use figma_take_screenshot to verify the result l
 				),
 				newValue: z.object({
 					name: z.string().optional().describe("New name for the property"),
-					defaultValue: z.any().optional().describe("New default value"),
-					preferredValues: z.array(z.any()).optional().describe("Preferred values (INSTANCE_SWAP only)"),
+					defaultValue: z.union([z.string(), z.number(), z.boolean()]).optional().describe("New default value"),
+					preferredValues: z.array(z.object({
+						type: z.enum(["COMPONENT", "COMPONENT_SET"]).describe("Type of preferred value"),
+						key: z.string().describe("Component or component set key"),
+					})).optional().describe("Preferred values (INSTANCE_SWAP only)"),
 				}).describe("Object with the values to update"),
 			},
 			async ({ nodeId, propertyName, newValue }) => {
@@ -3589,6 +3666,556 @@ After instantiating components, use figma_take_screenshot to verify the result l
 							text: JSON.stringify({
 								error: error instanceof Error ? error.message : String(error),
 								hint: "Make sure the parent node supports children (frames, groups, etc.)",
+							}, null, 2),
+						}],
+						isError: true,
+					};
+				}
+			},
+		);
+
+		// Tool: Arrange Component Set (Professional Layout with Native Visualization)
+		// Recreates component set using figma.combineAsVariants() for proper purple dashed frame
+		this.server.tool(
+			"figma_arrange_component_set",
+			`Organize and style a component set with Figma's native purple dashed visualization.
+
+**🎯 USE THIS TOOL WHEN THE USER:**
+- Asks to "create variants" or "add variants" to a component
+- Wants to "add states" like hover, disabled, pressed, focus
+- Requests "different sizes" (small, medium, large) of a component
+- Says "make this a component with variants"
+- Asks to "organize" or "arrange" or "fix" a component set
+- Mentions the component set looks "messy" or variants are "overlapping"
+- Wants a "proper component set" or "professional component layout"
+- After creating multiple component variants that need to be combined
+- When component variants exist but lack the purple dashed border styling
+
+**🔄 TYPICAL WORKFLOW:**
+1. User designs a UI element (button, card, input, etc.)
+2. User requests variants → AI creates component variants
+3. **→ CALL THIS TOOL** to combine variants into a proper component set with:
+   - Purple dashed border (Figma's native component set styling)
+   - Organized grid layout
+   - Auto-generated property labels
+
+**What this tool does:**
+1. Takes an existing component set (or selected components)
+2. Recreates it using figma.combineAsVariants() for proper Figma integration
+3. Applies purple dashed border styling (Figma's default component set appearance)
+4. Arranges variants in a clean grid pattern
+5. Returns the new component set ready for use
+
+**Result Structure:**
+\`\`\`
+Page
+└── Component Container (white frame, auto-sized)
+    ├── Title (component name)
+    ├── Content Row
+    │   ├── Row Labels (vertically aligned with grid rows)
+    │   │   ├── Spacer (for column header height)
+    │   │   └── Row labels with exact row heights
+    │   └── Grid Column
+    │       ├── Column Headers (horizontally aligned with grid columns)
+    │       └── COMPONENT_SET (purple dashed border)
+    │           └── COMPONENT variants in grid
+\`\`\`
+
+**Layout features:**
+- White container frame that auto-sizes to fit all content
+- Row labels: Vertically centered with their corresponding grid rows
+- Column headers: Horizontally centered with their corresponding grid columns
+- Component set: Uses Figma's native purple dashed border
+- All elements properly contained (no floating labels)
+
+**Grid structure:**
+- Columns = last property (usually State: Default, Hover, Disabled)
+- Rows = combination of other properties (Type + Size)`,
+			{
+				componentSetId: z.string().optional().describe(
+					"Node ID of the component set to arrange. If not provided, will look for a selected component set."
+				),
+				componentSetName: z.string().optional().describe(
+					"Name of the component set to find. Used if componentSetId not provided."
+				),
+				options: z.object({
+					gap: z.number().optional().default(24).describe(
+						"Gap between grid cells in pixels (default: 24)"
+					),
+					cellPadding: z.number().optional().default(20).describe(
+						"Padding inside each cell around the variant (default: 20)"
+					),
+					columnProperty: z.string().optional().describe(
+						"Property to use for columns (default: auto-detect last property, usually 'State')"
+					),
+				}).optional().describe("Layout options"),
+			},
+			async ({ componentSetId, componentSetName, options }) => {
+				try {
+					const connector = await this.getDesktopConnector();
+
+					// Build the code to execute in Figma
+					const code = `
+// ============================================================================
+// COMPONENT SET ARRANGEMENT WITH PROPER LABELS AND CONTAINER
+// Creates: White container frame → Row labels (left) → Column headers (top) → Component set (center)
+// Uses auto-layout for proper alignment of labels with grid cells
+// ============================================================================
+
+// Configuration
+const config = ${JSON.stringify(options || {})};
+const gap = config.gap ?? 24;
+const cellPadding = config.cellPadding ?? 20;
+const columnProperty = config.columnProperty || null;
+
+// Layout constants
+const LABEL_FONT_SIZE = 12;
+const LABEL_COLOR = { r: 0.4, g: 0.4, b: 0.4 };  // Gray text
+const TITLE_FONT_SIZE = 24;
+const TITLE_COLOR = { r: 0.1, g: 0.1, b: 0.1 };  // Dark text
+const CONTAINER_PADDING = 40;
+const LABEL_GAP = 16;  // Gap between labels and component set
+const COLUMN_HEADER_HEIGHT = 32;
+
+// Find the component set
+let componentSet = null;
+const csId = ${JSON.stringify(componentSetId || null)};
+const csName = ${JSON.stringify(componentSetName || null)};
+
+if (csId) {
+	componentSet = await figma.getNodeByIdAsync(csId);
+} else if (csName) {
+	const allNodes = figma.currentPage.findAll(n => n.type === "COMPONENT_SET" && n.name === csName);
+	componentSet = allNodes[0];
+} else {
+	const selection = figma.currentPage.selection;
+	componentSet = selection.find(n => n.type === "COMPONENT_SET");
+}
+
+if (!componentSet || componentSet.type !== "COMPONENT_SET") {
+	return { error: "Component set not found. Provide componentSetId, componentSetName, or select a component set." };
+}
+
+const page = figma.currentPage;
+const csOriginalX = componentSet.x;
+const csOriginalY = componentSet.y;
+const csOriginalName = componentSet.name;
+
+// Get all variant components
+const variants = componentSet.children.filter(n => n.type === "COMPONENT");
+if (variants.length === 0) {
+	return { error: "No variants found in component set" };
+}
+
+// Parse variant properties from names
+const parseVariantName = (name) => {
+	const props = {};
+	const parts = name.split(", ");
+	for (const part of parts) {
+		const [key, value] = part.split("=");
+		if (key && value) {
+			props[key.trim()] = value.trim();
+		}
+	}
+	return props;
+};
+
+// Collect all properties and their unique values (preserving order)
+const propertyValues = {};
+const propertyOrder = [];
+for (const variant of variants) {
+	const props = parseVariantName(variant.name);
+	for (const [key, value] of Object.entries(props)) {
+		if (!propertyValues[key]) {
+			propertyValues[key] = new Set();
+			propertyOrder.push(key);
+		}
+		propertyValues[key].add(value);
+	}
+}
+for (const key of Object.keys(propertyValues)) {
+	propertyValues[key] = Array.from(propertyValues[key]);
+}
+
+// Determine grid structure: columns = last property (usually State), rows = other properties
+const columnProp = columnProperty || propertyOrder[propertyOrder.length - 1];
+const columnValues = propertyValues[columnProp] || [];
+const rowProps = propertyOrder.filter(p => p !== columnProp);
+
+// Generate all row combinations
+const generateRowCombinations = (props, values) => {
+	if (props.length === 0) return [{}];
+	if (props.length === 1) {
+		return values[props[0]].map(v => ({ [props[0]]: v }));
+	}
+	const result = [];
+	const firstProp = props[0];
+	const restProps = props.slice(1);
+	const restCombos = generateRowCombinations(restProps, values);
+	for (const value of values[firstProp]) {
+		for (const combo of restCombos) {
+			result.push({ [firstProp]: value, ...combo });
+		}
+	}
+	return result;
+};
+const rowCombinations = generateRowCombinations(rowProps, propertyValues);
+
+const totalCols = columnValues.length;
+const totalRows = rowCombinations.length;
+
+// Calculate max variant dimensions
+let maxVariantWidth = 0;
+let maxVariantHeight = 0;
+for (const v of variants) {
+	if (v.width > maxVariantWidth) maxVariantWidth = v.width;
+	if (v.height > maxVariantHeight) maxVariantHeight = v.height;
+}
+
+// Calculate cell dimensions (each cell in the grid)
+const cellWidth = Math.ceil(maxVariantWidth + cellPadding);
+const cellHeight = Math.ceil(maxVariantHeight + cellPadding);
+
+// Calculate component set dimensions
+const edgePadding = 24;  // Padding inside component set
+const csWidth = (totalCols * cellWidth) + ((totalCols - 1) * gap) + (edgePadding * 2);
+const csHeight = (totalRows * cellHeight) + ((totalRows - 1) * gap) + (edgePadding * 2);
+
+// ============================================================================
+// STEP 1: Remove old labels and container frames from previous arrangements
+// ============================================================================
+const oldElements = page.children.filter(n =>
+	(n.type === "TEXT" && (n.name.startsWith("Row: ") || n.name.startsWith("Col: "))) ||
+	(n.type === "FRAME" && (n.name === "Component Container" || n.name === "Row Labels" || n.name === "Column Headers"))
+);
+for (const el of oldElements) {
+	el.remove();
+}
+
+// ============================================================================
+// STEP 2: Clone variants and recreate component set with native visualization
+// ============================================================================
+const clonedVariants = [];
+for (const variant of variants) {
+	const clone = variant.clone();
+	page.appendChild(clone);
+	clonedVariants.push(clone);
+}
+
+// Delete the old component set
+componentSet.remove();
+
+// Recreate using figma.combineAsVariants() for native purple dashed frame
+const newComponentSet = figma.combineAsVariants(clonedVariants, page);
+newComponentSet.name = csOriginalName;
+
+// Apply purple dashed border (Figma's native component set styling)
+newComponentSet.strokes = [{
+	type: 'SOLID',
+	color: { r: 151/255, g: 71/255, b: 255/255 }  // Figma's purple: #9747FF
+}];
+newComponentSet.dashPattern = [10, 5];
+newComponentSet.strokeWeight = 1;
+newComponentSet.strokeAlign = "INSIDE";
+
+// ============================================================================
+// STEP 3: Arrange variants in grid pattern inside component set
+// ============================================================================
+const newVariants = newComponentSet.children.filter(n => n.type === "COMPONENT");
+
+for (const variant of newVariants) {
+	const props = parseVariantName(variant.name);
+	const colValue = props[columnProp];
+	const colIdx = columnValues.indexOf(colValue);
+
+	// Find matching row
+	let rowIdx = -1;
+	for (let i = 0; i < rowCombinations.length; i++) {
+		const combo = rowCombinations[i];
+		let match = true;
+		for (const [key, value] of Object.entries(combo)) {
+			if (props[key] !== value) {
+				match = false;
+				break;
+			}
+		}
+		if (match) {
+			rowIdx = i;
+			break;
+		}
+	}
+
+	if (colIdx >= 0 && rowIdx >= 0) {
+		// Calculate cell position
+		const cellX = edgePadding + colIdx * (cellWidth + gap);
+		const cellY = edgePadding + rowIdx * (cellHeight + gap);
+
+		// Center variant within cell
+		const variantX = Math.round(cellX + (cellWidth - variant.width) / 2);
+		const variantY = Math.round(cellY + (cellHeight - variant.height) / 2);
+
+		variant.x = variantX;
+		variant.y = variantY;
+	}
+}
+
+// Resize component set to fit grid
+newComponentSet.resize(csWidth, csHeight);
+
+// ============================================================================
+// STEP 4: Create white container frame with proper structure
+// ============================================================================
+
+// Load font for labels
+await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+await figma.loadFontAsync({ family: "Inter", style: "Semi Bold" });
+
+// Create the main container frame (white background)
+const containerFrame = figma.createFrame();
+containerFrame.name = "Component Container";
+containerFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];  // White
+containerFrame.cornerRadius = 8;
+containerFrame.layoutMode = 'VERTICAL';
+containerFrame.primaryAxisSizingMode = 'AUTO';
+containerFrame.counterAxisSizingMode = 'AUTO';
+containerFrame.paddingTop = CONTAINER_PADDING;
+containerFrame.paddingRight = CONTAINER_PADDING;
+containerFrame.paddingBottom = CONTAINER_PADDING;
+containerFrame.paddingLeft = CONTAINER_PADDING;
+containerFrame.itemSpacing = 24;
+
+// Add title
+const titleText = figma.createText();
+titleText.name = "Title";
+titleText.characters = csOriginalName;
+titleText.fontSize = TITLE_FONT_SIZE;
+titleText.fontName = { family: "Inter", style: "Semi Bold" };
+titleText.fills = [{ type: 'SOLID', color: TITLE_COLOR }];
+// Append to parent FIRST, then set layoutSizing
+containerFrame.appendChild(titleText);
+titleText.layoutSizingHorizontal = 'HUG';
+titleText.layoutSizingVertical = 'HUG';
+
+// Create content row (horizontal: row labels + grid column)
+const contentRow = figma.createFrame();
+contentRow.name = "Content Row";
+contentRow.fills = [];  // Transparent
+contentRow.layoutMode = 'HORIZONTAL';
+contentRow.primaryAxisSizingMode = 'AUTO';
+contentRow.counterAxisSizingMode = 'AUTO';
+contentRow.itemSpacing = LABEL_GAP;
+contentRow.counterAxisAlignItems = 'MIN';  // Align to top
+containerFrame.appendChild(contentRow);
+
+// ============================================================================
+// STEP 5: Create row labels column (left side)
+// ============================================================================
+const rowLabelsFrame = figma.createFrame();
+rowLabelsFrame.name = "Row Labels";
+rowLabelsFrame.fills = [];  // Transparent
+rowLabelsFrame.layoutMode = 'VERTICAL';
+rowLabelsFrame.primaryAxisSizingMode = 'AUTO';
+rowLabelsFrame.counterAxisSizingMode = 'AUTO';
+rowLabelsFrame.counterAxisAlignItems = 'MAX';  // Right-align text
+rowLabelsFrame.itemSpacing = 0;  // No spacing - we'll use fixed heights
+
+// Add spacer for column headers alignment
+// Must account for: column header height + gap + component set's internal edgePadding
+const rowLabelSpacer = figma.createFrame();
+rowLabelSpacer.name = "Spacer";
+rowLabelSpacer.fills = [];
+rowLabelSpacer.resize(10, COLUMN_HEADER_HEIGHT + gap + edgePadding);  // Align with first row inside component set
+rowLabelsFrame.appendChild(rowLabelSpacer);
+// IMPORTANT: Set layoutSizing AFTER appendChild (node must be in auto-layout parent first)
+rowLabelSpacer.layoutSizingVertical = 'FIXED';
+
+// Create row labels - each with VERTICAL layout for direct vertical centering
+// Using VERTICAL layout: primaryAxis = vertical, counterAxis = horizontal
+// So primaryAxisAlignItems = 'CENTER' directly controls vertical centering
+for (let i = 0; i < rowCombinations.length; i++) {
+	const combo = rowCombinations[i];
+	const labelText = rowProps.map(p => combo[p]).join(" / ");
+	const isLastRow = (i === rowCombinations.length - 1);
+
+	// Create a frame to hold the label with VERTICAL layout
+	const rowLabelContainer = figma.createFrame();
+	rowLabelContainer.name = "Row: " + labelText;
+	rowLabelContainer.fills = [];
+	rowLabelContainer.layoutMode = 'VERTICAL';  // VERTICAL so primaryAxis controls Y
+	rowLabelContainer.primaryAxisSizingMode = 'FIXED';  // CRITICAL: Don't hug content, maintain fixed height
+	rowLabelContainer.primaryAxisAlignItems = 'CENTER';  // CENTER = vertically centered within fixed height
+	rowLabelContainer.counterAxisAlignItems = 'MAX';  // MAX = right-aligned horizontally
+
+	// Fixed height = cellHeight only (gap handled separately below)
+	rowLabelContainer.resize(10, cellHeight);
+
+	const label = figma.createText();
+	label.characters = labelText;
+	label.fontSize = LABEL_FONT_SIZE;
+	label.fontName = { family: "Inter", style: "Regular" };
+	label.fills = [{ type: 'SOLID', color: LABEL_COLOR }];
+	label.textAlignHorizontal = 'RIGHT';
+	rowLabelContainer.appendChild(label);
+
+	// Append to parent FIRST, then set layoutSizing properties
+	rowLabelsFrame.appendChild(rowLabelContainer);
+	rowLabelContainer.layoutSizingHorizontal = 'HUG';
+	rowLabelContainer.layoutSizingVertical = 'FIXED';
+
+	// Add gap spacer AFTER the row label (except for the last row)
+	// This separates the gap from the centering calculation entirely
+	if (!isLastRow) {
+		const gapSpacer = figma.createFrame();
+		gapSpacer.name = "Row Gap";
+		gapSpacer.fills = [];
+		gapSpacer.resize(1, gap);
+		rowLabelsFrame.appendChild(gapSpacer);
+		// Plain frames can only use FIXED or FILL (not HUG)
+		gapSpacer.layoutSizingHorizontal = 'FIXED';
+		gapSpacer.layoutSizingVertical = 'FIXED';
+	}
+}
+
+contentRow.appendChild(rowLabelsFrame);
+
+// ============================================================================
+// STEP 6: Create grid column (column headers + component set)
+// ============================================================================
+const gridColumn = figma.createFrame();
+gridColumn.name = "Grid Column";
+gridColumn.fills = [];  // Transparent
+gridColumn.layoutMode = 'VERTICAL';
+gridColumn.primaryAxisSizingMode = 'AUTO';
+gridColumn.counterAxisSizingMode = 'AUTO';
+gridColumn.itemSpacing = gap;
+
+// Create column headers row
+const columnHeadersRow = figma.createFrame();
+columnHeadersRow.name = "Column Headers";
+columnHeadersRow.fills = [];
+columnHeadersRow.layoutMode = 'HORIZONTAL';
+columnHeadersRow.resize(csWidth, COLUMN_HEADER_HEIGHT);
+columnHeadersRow.itemSpacing = 0;  // No spacing - we control widths precisely
+columnHeadersRow.paddingLeft = edgePadding;  // Match component set edge padding
+columnHeadersRow.paddingRight = edgePadding;
+
+// Create column header labels - each with width matching cell + gap
+for (let i = 0; i < columnValues.length; i++) {
+	const colValue = columnValues[i];
+	const isLastCol = (i === columnValues.length - 1);
+
+	const colHeaderContainer = figma.createFrame();
+	colHeaderContainer.name = "Col: " + colValue;
+	colHeaderContainer.fills = [];
+	colHeaderContainer.layoutMode = 'HORIZONTAL';
+	colHeaderContainer.primaryAxisAlignItems = 'CENTER';  // Center horizontally
+	colHeaderContainer.counterAxisAlignItems = 'MAX';  // Align to bottom
+
+	// Set width to match cell + gap (except last column)
+	// Use paddingRight to push the gap to the RIGHT of the centered text area
+	const colWidth = isLastCol ? cellWidth : cellWidth + gap;
+	colHeaderContainer.resize(colWidth, COLUMN_HEADER_HEIGHT);
+	if (!isLastCol) {
+		colHeaderContainer.paddingRight = gap;  // Gap goes right, text centers in cellWidth
+	}
+
+	const label = figma.createText();
+	label.characters = colValue;
+	label.fontSize = LABEL_FONT_SIZE;
+	label.fontName = { family: "Inter", style: "Regular" };
+	label.fills = [{ type: 'SOLID', color: LABEL_COLOR }];
+	label.textAlignHorizontal = 'CENTER';
+	colHeaderContainer.appendChild(label);
+
+	// Append to parent FIRST, then set layoutSizing
+	columnHeadersRow.appendChild(colHeaderContainer);
+	colHeaderContainer.layoutSizingHorizontal = 'FIXED';
+	colHeaderContainer.layoutSizingVertical = 'FILL';
+}
+
+// Append to parent FIRST, then set layoutSizing
+gridColumn.appendChild(columnHeadersRow);
+columnHeadersRow.layoutSizingHorizontal = 'FIXED';
+columnHeadersRow.layoutSizingVertical = 'FIXED';
+
+// Create a wrapper frame to hold the component set (since component sets don't work well in auto-layout)
+const componentSetWrapper = figma.createFrame();
+componentSetWrapper.name = "Component Set Wrapper";
+componentSetWrapper.fills = [];
+componentSetWrapper.resize(csWidth, csHeight);
+
+// Move component set inside wrapper (positioned at 0,0)
+componentSetWrapper.appendChild(newComponentSet);
+newComponentSet.x = 0;
+newComponentSet.y = 0;
+
+// Append to parent FIRST, then set layoutSizing
+gridColumn.appendChild(componentSetWrapper);
+componentSetWrapper.layoutSizingHorizontal = 'FIXED';
+componentSetWrapper.layoutSizingVertical = 'FIXED';
+
+contentRow.appendChild(gridColumn);
+
+// Position container at original location
+containerFrame.x = csOriginalX - CONTAINER_PADDING - 120;  // Account for row labels width
+containerFrame.y = csOriginalY - CONTAINER_PADDING - TITLE_FONT_SIZE - 24 - COLUMN_HEADER_HEIGHT - gap;
+
+// Select and zoom to show result
+figma.currentPage.selection = [containerFrame];
+figma.viewport.scrollAndZoomIntoView([containerFrame]);
+
+return {
+	success: true,
+	message: "Component set arranged with proper container, labels, and alignment",
+	containerId: containerFrame.id,
+	componentSetId: newComponentSet.id,
+	componentSetName: newComponentSet.name,
+	grid: {
+		rows: totalRows,
+		columns: totalCols,
+		cellWidth: cellWidth,
+		cellHeight: cellHeight,
+		gap: gap,
+		columnProperty: columnProp,
+		columnValues: columnValues,
+		rowProperties: rowProps,
+		rowLabels: rowCombinations.map(combo => rowProps.map(p => combo[p]).join(" / "))
+	},
+	componentSetSize: { width: csWidth, height: csHeight },
+	variantCount: newVariants.length,
+	structure: {
+		container: "White frame with title, row labels, column headers, and component set",
+		rowLabels: "Vertically aligned with each row's center",
+		columnHeaders: "Horizontally aligned with each column's center"
+	}
+};
+`;
+
+					const result = await connector.executeCodeViaUI(code, 25000);
+
+					if (!result.success) {
+						throw new Error(result.error || "Failed to arrange component set");
+					}
+
+					return {
+						content: [{
+							type: "text",
+							text: JSON.stringify({
+								...result.result,
+								hint: result.result?.success
+									? "Component set arranged in a white container frame with properly aligned row and column labels. The purple dashed border is visible. Use figma_capture_screenshot to validate the layout."
+									: undefined,
+							}, null, 2),
+						}],
+					};
+				} catch (error) {
+					logger.error({ error }, "Failed to arrange component set");
+					return {
+						content: [{
+							type: "text",
+							text: JSON.stringify({
+								error: error instanceof Error ? error.message : String(error),
+								hint: "Make sure the Desktop Bridge plugin is running and a component set exists.",
 							}, null, 2),
 						}],
 						isError: true,

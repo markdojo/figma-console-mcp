@@ -680,7 +680,7 @@ export class FigmaConsoleMCPv3 extends McpAgent {
 										clearedCount,
 										timestamp: Date.now(),
 										ai_instruction:
-											"⚠️ CRITICAL: Console cleared successfully, but this operation disrupts the monitoring connection. You MUST reconnect the MCP server using `/mcp reconnect figma-console` before calling figma_get_console_logs again. Best practice: Avoid clearing console - filter/parse logs instead to maintain monitoring connection.",
+											"CRITICAL: Console cleared successfully, but this operation disrupts the monitoring connection. You MUST reconnect the MCP server using `/mcp reconnect figma-console` before calling figma_get_console_logs again. Best practice: Avoid clearing console - filter/parse logs instead to maintain monitoring connection.",
 									},
 									null,
 									2,
@@ -857,6 +857,13 @@ export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
 		const url = new URL(request.url);
 
+		// Redirect /docs to subdomain
+		if (url.pathname === "/docs" || url.pathname.startsWith("/docs/")) {
+			const newPath = url.pathname.replace(/^\/docs\/?/, "/");
+			const redirectUrl = `https://docs.figma-console-mcp.southleft.com${newPath}${url.search}`;
+			return Response.redirect(redirectUrl, 301);
+		}
+
 		// SSE endpoint for remote MCP clients
 		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
 			return FigmaConsoleMCPv3.serveSSE("/sse").fetch(request, env, ctx);
@@ -920,7 +927,7 @@ export default {
 			if (error) {
 				return new Response(
 					`<html><body>
-						<h1>❌ Authentication Failed</h1>
+						<h1>Authentication Failed</h1>
 						<p>Error: ${error}</p>
 						<p>Description: ${url.searchParams.get("error_description") || "Unknown error"}</p>
 						<p>You can close this window and try again.</p>
@@ -942,7 +949,7 @@ export default {
 			if (!sessionId) {
 				return new Response(
 					`<html><body>
-						<h1>❌ Invalid or Expired Request</h1>
+						<h1>Invalid or Expired Request</h1>
 						<p>The authentication request has expired or is invalid.</p>
 						<p>Please try authenticating again.</p>
 					</body></html>`,
@@ -1119,7 +1126,7 @@ export default {
 				logger.error({ error, sessionId }, "OAuth callback failed");
 				return new Response(
 					`<html><body>
-						<h1>❌ Authentication Error</h1>
+						<h1>Authentication Error</h1>
 						<p>Failed to complete authentication: ${error instanceof Error ? error.message : String(error)}</p>
 						<p>Please try again or contact support.</p>
 					</body></html>`,
@@ -1161,142 +1168,1228 @@ export default {
 		return Response.redirect("https://p198.p4.n0.cdn.zight.com/items/Qwu1Dywx/b61b7b8f-05dc-4063-8a40-53fa4f8e3e97.jpg", 302);
 	}
 
-	// Root path - serve landing page with proper meta tags
+	// Proxy /docs to Mintlify
+	if (/^\/docs/.test(url.pathname)) {
+		// Try mintlify.app domain (Mintlify's standard hosting)
+		const DOCS_URL = "southleftllc.mintlify.app";
+		const CUSTOM_URL = "figma-console-mcp.southleft.com";
+
+		const proxyUrl = new URL(request.url);
+		proxyUrl.hostname = DOCS_URL;
+
+		const proxyRequest = new Request(proxyUrl, request);
+		proxyRequest.headers.set("Host", DOCS_URL);
+		proxyRequest.headers.set("X-Forwarded-Host", CUSTOM_URL);
+		proxyRequest.headers.set("X-Forwarded-Proto", "https");
+
+		return await fetch(proxyRequest);
+	}
+
+	// Root path - serve landing page with editorial layout and light/dark mode
 	if (url.pathname === "/") {
 		return new Response(
 			`<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Figma Console MCP</title>
-	<link rel="icon" type="image/jpeg" href="https://p198.p4.n0.cdn.zight.com/items/Qwu1Dywx/b61b7b8f-05dc-4063-8a40-53fa4f8e3e97.jpg">
-	<meta name="description" content="Model Context Protocol server for Figma debugging and design system extraction">
+	<title>Figma Console MCP - The Most Comprehensive MCP Server for Figma</title>
+	<link rel="icon" type="image/svg+xml" href="https://docs.figma-console-mcp.southleft.com/favicon.svg">
+	<meta name="description" content="Turn your Figma design system into a living API. 40+ tools give AI assistants deep access to design tokens, component specs, variables, and programmatic design creation.">
+
+	<!-- Open Graph -->
+	<meta property="og:type" content="website">
+	<meta property="og:url" content="https://figma-console-mcp.southleft.com">
+	<meta property="og:title" content="Figma Console MCP - Turn Your Design System Into a Living API">
+	<meta property="og:description" content="The most comprehensive MCP server for Figma. 40+ tools give AI assistants deep access to design tokens, components, variables, and programmatic design creation.">
+	<meta property="og:image" content="https://docs.figma-console-mcp.southleft.com/images/og-image.jpg">
+	<meta property="og:image:width" content="1200">
+	<meta property="og:image:height" content="630">
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary_large_image">
+	<meta name="twitter:title" content="Figma Console MCP - Turn Your Design System Into a Living API">
+	<meta name="twitter:description" content="The most comprehensive MCP server for Figma. 40+ tools give AI assistants deep access to design tokens, components, variables, and programmatic design creation.">
+	<meta name="twitter:image" content="https://docs.figma-console-mcp.southleft.com/images/og-image.jpg">
+
+	<meta name="theme-color" content="#0D9488">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 	<style>
-		* {
-			margin: 0;
-			padding: 0;
-			box-sizing: border-box;
+		:root {
+			--color-primary: #0D9488;
+			--color-primary-light: #14B8A6;
+			--color-primary-dark: #0F766E;
+			--color-bg: #0F0F0F;
+			--color-bg-elevated: #161616;
+			--color-bg-card: #1A1A1A;
+			--color-border: #2A2A2A;
+			--color-border-hover: #3A3A3A;
+			--color-rule: #2A2A2A;
+			--color-text: #FAFAFA;
+			--color-text-secondary: #A1A1A1;
+			--color-text-tertiary: #666666;
+			--font-mono: "JetBrains Mono", "SF Mono", Monaco, monospace;
+			--radius-sm: 6px;
+			--radius-md: 10px;
+			--radius-lg: 16px;
+			--transition: 0.2s ease;
 		}
+
+		[data-theme="light"] {
+			--color-bg: #FAFAFA;
+			--color-bg-elevated: #FFFFFF;
+			--color-bg-card: #FFFFFF;
+			--color-border: #E5E5E5;
+			--color-border-hover: #D4D4D4;
+			--color-rule: #E5E5E5;
+			--color-text: #171717;
+			--color-text-secondary: #525252;
+			--color-text-tertiary: #A3A3A3;
+		}
+
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+
+		html {
+			scroll-behavior: smooth;
+		}
+
 		body {
 			font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-			background: #ffffff;
-			color: #000000;
-			line-height: 1.5;
+			background: var(--color-bg);
+			color: var(--color-text);
+			line-height: 1.6;
+			min-height: 100vh;
+			transition: background var(--transition), color var(--transition);
 		}
+
+		a { color: inherit; text-decoration: none; }
+
+		/* Header */
 		.header {
-			padding: 24px 48px;
-			border-bottom: 1px solid #e5e5e5;
+			position: sticky;
+			top: 0;
+			z-index: 100;
+			padding: 16px 32px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			background: var(--color-bg);
+			border-bottom: 1px solid var(--color-rule);
+			backdrop-filter: blur(12px);
+			transition: background var(--transition), border-color var(--transition);
 		}
-		.logo {
+
+		.logo img {
+			height: 35px;
+			transition: opacity var(--transition);
+		}
+
+		.logo img:hover { opacity: 0.8; }
+
+		.header-right {
 			display: flex;
 			align-items: center;
-			gap: 12px;
-			font-size: 18px;
-			font-weight: 600;
+			gap: 24px;
 		}
-		.logo img {
-			width: 32px;
-			height: 32px;
+
+		.nav {
+			display: flex;
+			gap: 24px;
+			align-items: center;
 		}
-		.container {
-			max-width: 1200px;
+
+		.nav a {
+			color: var(--color-text-secondary);
+			font-size: 14px;
+			font-weight: 500;
+			transition: color var(--transition);
+		}
+
+		.nav a:hover { color: var(--color-text); }
+
+		.theme-toggle {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 36px;
+			height: 36px;
+			background: transparent;
+			border: 1px solid var(--color-border);
+			border-radius: var(--radius-sm);
+			cursor: pointer;
+			color: var(--color-text-secondary);
+			transition: all var(--transition);
+		}
+
+		.theme-toggle:hover {
+			border-color: var(--color-border-hover);
+			color: var(--color-text);
+		}
+
+		.theme-toggle svg { width: 18px; height: 18px; }
+		.theme-toggle .sun { display: none; }
+		[data-theme="light"] .theme-toggle .moon { display: none; }
+		[data-theme="light"] .theme-toggle .sun { display: block; }
+
+		/* Main layout */
+		.main {
+			max-width: 1280px;
 			margin: 0 auto;
-			padding: 80px 48px;
+			padding: 64px 32px 80px;
 		}
+
+		/* Section dividers */
+		.section-rule {
+			border: none;
+			border-top: 1px solid var(--color-rule);
+			margin: 72px 0;
+		}
+
+		/* Grid layout */
+		.grid {
+			display: grid;
+			grid-template-columns: repeat(12, 1fr);
+			gap: 48px 48px;
+		}
+
+		.grid-cell {
+			transition: all var(--transition);
+		}
+
+		/* Rule-based separators for grid cells */
+		.grid-cell.rule-left {
+			padding-left: 48px;
+			border-left: 1px solid var(--color-rule);
+		}
+
+		.grid-cell.rule-top {
+			padding-top: 32px;
+			border-top: 1px solid var(--color-rule);
+		}
+
+		/* Hero section */
+		.hero-cell {
+			grid-column: span 7;
+			padding-right: 48px;
+		}
+
+		.badge {
+			display: inline-block;
+			width: fit-content;
+			color: var(--color-text-secondary);
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			margin-bottom: 20px;
+		}
+
 		h1 {
-			font-size: 64px;
+			font-size: 48px;
 			font-weight: 700;
-			margin-bottom: 24px;
-			letter-spacing: -0.02em;
+			letter-spacing: -0.03em;
 			line-height: 1.1;
+			margin-bottom: 20px;
 		}
-		.subtitle {
-			font-size: 20px;
-			color: #666666;
-			margin-bottom: 48px;
-			max-width: 600px;
+
+		.highlight {
+			color: var(--color-primary-light);
 		}
-		.cta {
+
+		.hero-subtitle {
+			font-size: 18px;
+			color: var(--color-text-secondary);
+			line-height: 1.7;
+			max-width: 560px;
+			margin-bottom: 32px;
+		}
+
+		.cta-row {
+			display: flex;
+			gap: 12px;
+			flex-wrap: wrap;
+		}
+
+		.btn {
 			display: inline-flex;
 			align-items: center;
 			gap: 8px;
-			padding: 12px 24px;
-			background: #000000;
-			color: #ffffff;
-			text-decoration: none;
-			border-radius: 8px;
+			padding: 12px 20px;
+			border-radius: var(--radius-sm);
 			font-weight: 500;
+			font-size: 14px;
+			transition: all var(--transition);
+			border: none;
+			cursor: pointer;
+		}
+
+		.btn svg { width: 16px; height: 16px; }
+
+		.btn-primary {
+			background: var(--color-primary);
+			color: #FFFFFF;
+		}
+
+		.btn-primary:hover { background: var(--color-primary-dark); }
+
+		.btn-secondary {
+			background: transparent;
+			color: var(--color-text);
+			border: 1px solid var(--color-border);
+		}
+
+		.btn-secondary:hover {
+			border-color: var(--color-border-hover);
+			background: var(--color-bg-elevated);
+		}
+
+		/* Hero right - capabilities showcase */
+		.showcase-cell {
+			grid-column: span 5;
+		}
+
+		.showcase-label {
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			color: var(--color-text-tertiary);
+			margin-bottom: 16px;
+		}
+
+		.showcase-stat {
+			display: flex;
+			align-items: baseline;
+			gap: 12px;
+			margin-bottom: 24px;
+		}
+
+		.showcase-stat .number {
+			font-size: 56px;
+			font-weight: 700;
+			color: var(--color-primary-light);
+			line-height: 1;
+		}
+
+		.showcase-stat .label {
 			font-size: 16px;
-			transition: background 0.2s;
+			color: var(--color-text-secondary);
 		}
-		.cta:hover {
-			background: #333333;
+
+		.capability-list {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
 		}
-		.features {
-			display: grid;
-			grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-			gap: 32px;
-			margin-top: 80px;
+
+		.capability-item {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			padding: 12px 16px;
+			background: var(--color-bg-elevated);
+			border: 1px solid var(--color-border);
+			border-radius: var(--radius-md);
+			font-size: 14px;
+			color: var(--color-text-secondary);
+			transition: all var(--transition);
 		}
-		.feature {
-			padding: 24px;
-			border: 1px solid #e5e5e5;
-			border-radius: 8px;
+
+		.capability-item:hover {
+			border-color: var(--color-primary);
+			color: var(--color-text);
 		}
-		.feature h3 {
+
+		.capability-item svg {
+			width: 18px;
+			height: 18px;
+			color: var(--color-primary-light);
+			flex-shrink: 0;
+		}
+
+		/* Value proposition section */
+		.value-cell {
+			grid-column: span 12;
+			text-align: center;
+			padding: 64px 48px;
+			position: relative;
+			background: linear-gradient(135deg, rgba(13, 148, 136, 0.06) 0%, rgba(13, 148, 136, 0.02) 50%, transparent 100%);
+			border-radius: var(--radius-lg);
+			border: 1px solid rgba(13, 148, 136, 0.1);
+		}
+
+		.value-cell::before {
+			content: '';
+			position: absolute;
+			top: -1px;
+			left: 50%;
+			transform: translateX(-50%);
+			width: 120px;
+			height: 3px;
+			background: linear-gradient(90deg, transparent, var(--color-primary-light), transparent);
+			border-radius: 2px;
+		}
+
+		.value-cell h2 {
+			font-size: 36px;
+			font-weight: 700;
+			margin-bottom: 16px;
+			letter-spacing: -0.03em;
+			background: linear-gradient(135deg, var(--color-text) 0%, var(--color-primary-light) 100%);
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+		}
+
+		[data-theme="light"] .value-cell h2 {
+			background: linear-gradient(135deg, var(--color-text) 0%, var(--color-primary-dark) 100%);
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+		}
+
+		.value-cell p {
+			font-size: 18px;
+			color: var(--color-text-secondary);
+			max-width: 680px;
+			margin: 0 auto;
+			line-height: 1.7;
+		}
+
+		/* Capabilities grid */
+		.capability-card {
+			grid-column: span 3;
+		}
+
+		.capability-icon {
+			width: 44px;
+			height: 44px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: rgba(13, 148, 136, 0.12);
+			border-radius: var(--radius-md);
+			color: var(--color-primary-light);
+			margin-bottom: 16px;
+		}
+
+		.capability-icon svg { width: 22px; height: 22px; }
+
+		.capability-card h3 {
+			font-size: 17px;
+			font-weight: 600;
+			margin-bottom: 10px;
+		}
+
+		.capability-card p {
+			font-size: 14px;
+			color: var(--color-text-secondary);
+			line-height: 1.7;
+		}
+
+		/* Prompt showcase */
+		.prompts-cell {
+			grid-column: span 6;
+		}
+
+		.section-header {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 24px;
+		}
+
+		.section-header-icon {
+			width: 40px;
+			height: 40px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: rgba(13, 148, 136, 0.12);
+			border-radius: var(--radius-md);
+			color: var(--color-primary-light);
+		}
+
+		.section-header-icon svg {
+			width: 20px;
+			height: 20px;
+		}
+
+		.section-header h3 {
+			font-size: 18px;
+			font-weight: 600;
+		}
+
+		.prompt-list {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+
+		.prompt-item {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			padding: 14px 16px;
+			background: var(--color-bg-elevated);
+			border: 1px solid var(--color-border);
+			border-radius: var(--radius-md);
+			font-family: var(--font-mono);
+			font-size: 13px;
+			color: var(--color-text-secondary);
+			transition: all var(--transition);
+		}
+
+		.prompt-item:hover {
+			border-color: var(--color-primary);
+			color: var(--color-text);
+		}
+
+		.prompt-item svg {
+			width: 16px;
+			height: 16px;
+			color: var(--color-primary-light);
+			flex-shrink: 0;
+		}
+
+		/* Audience cells */
+		.audience-cell {
+			grid-column: span 6;
+			padding: 24px 0;
+		}
+
+		.audience-header {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 28px;
+		}
+
+		.audience-icon {
+			width: 40px;
+			height: 40px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: rgba(13, 148, 136, 0.12);
+			border-radius: var(--radius-md);
+			color: var(--color-primary-light);
+		}
+
+		.audience-icon svg { width: 20px; height: 20px; }
+
+		.audience-header h3 {
+			font-size: 18px;
+			font-weight: 600;
+		}
+
+		.audience-list {
+			list-style: none;
+			display: flex;
+			flex-direction: column;
+			gap: 24px;
+		}
+
+		.audience-list li {
+			display: flex;
+			align-items: flex-start;
+			gap: 12px;
+			font-size: 14px;
+			color: var(--color-text-secondary);
+		}
+
+		.audience-list li svg {
+			width: 18px;
+			height: 18px;
+			color: var(--color-primary);
+			flex-shrink: 0;
+			margin-top: 1px;
+		}
+
+		/* Getting started CTA */
+		.getting-started-cell {
+			grid-column: span 12;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 40px 48px;
+			background: var(--color-bg-elevated);
+			border: 1px solid var(--color-border);
+			border-radius: var(--radius-lg);
+			margin-top: 32px;
+		}
+
+		.getting-started-content h3 {
 			font-size: 20px;
 			font-weight: 600;
-			margin-bottom: 12px;
+			margin-bottom: 8px;
 		}
-		.feature p {
-			color: #666666;
-			font-size: 15px;
-		}
-		.footer {
-			padding: 48px;
-			text-align: center;
-			color: #999999;
+
+		.getting-started-content p {
 			font-size: 14px;
-			border-top: 1px solid #e5e5e5;
-			margin-top: 120px;
+			color: var(--color-text-secondary);
+			max-width: 480px;
+		}
+
+		.getting-started-actions {
+			display: flex;
+			gap: 12px;
+		}
+
+		/* Blog CTA */
+		.blog-cell {
+			grid-column: span 12;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 32px 0;
+			border-top: 1px solid var(--color-rule);
+			margin-top: 40px;
+		}
+
+		.blog-content {
+			display: flex;
+			align-items: center;
+			gap: 16px;
+		}
+
+		.blog-icon {
+			width: 44px;
+			height: 44px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: rgba(13, 148, 136, 0.12);
+			border-radius: var(--radius-md);
+			color: var(--color-primary-light);
+		}
+
+		.blog-icon svg { width: 22px; height: 22px; }
+
+		.blog-text h4 {
+			font-size: 15px;
+			font-weight: 600;
+			margin-bottom: 2px;
+		}
+
+		.blog-text p {
+			font-size: 13px;
+			color: var(--color-text-secondary);
+		}
+
+		.blog-link {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			color: var(--color-primary-light);
+			font-size: 14px;
+			font-weight: 500;
+			transition: gap var(--transition);
+		}
+
+		.blog-link:hover { gap: 12px; }
+		.blog-link svg { width: 16px; height: 16px; }
+
+		/* Footer */
+		.footer {
+			max-width: 1280px;
+			margin: 0 auto;
+			padding: 24px 32px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			border-top: 1px solid var(--color-rule);
+			color: var(--color-text-tertiary);
+			font-size: 13px;
+		}
+
+		.footer a {
+			color: var(--color-text-secondary);
+			transition: color var(--transition);
+		}
+
+		.footer a:hover { color: var(--color-text); }
+
+		.footer-links {
+			display: flex;
+			gap: 24px;
+		}
+
+		/* Mobile nav */
+		.mobile-menu-btn {
+			display: none;
+			align-items: center;
+			justify-content: center;
+			width: 36px;
+			height: 36px;
+			background: transparent;
+			border: none;
+			cursor: pointer;
+			color: var(--color-text);
+		}
+
+		.mobile-menu-btn svg { width: 24px; height: 24px; }
+
+		/* Mobile menu overlay */
+		.mobile-menu {
+			display: none;
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: var(--color-bg);
+			z-index: 1000;
+			padding: 20px;
+			flex-direction: column;
+		}
+
+		.mobile-menu.active {
+			display: flex;
+		}
+
+		.mobile-menu-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 48px;
+		}
+
+		.mobile-menu-close {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 36px;
+			height: 36px;
+			background: transparent;
+			border: none;
+			cursor: pointer;
+			color: var(--color-text);
+		}
+
+		.mobile-menu-close svg { width: 24px; height: 24px; }
+
+		.mobile-menu-nav {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		.mobile-menu-nav a {
+			display: block;
+			padding: 16px 0;
+			font-size: 18px;
+			font-weight: 500;
+			color: var(--color-text);
+			border-bottom: 1px solid var(--color-border);
+			transition: color var(--transition);
+		}
+
+		.mobile-menu-nav a:hover {
+			color: var(--color-primary-light);
+		}
+
+		body.menu-open {
+			overflow: hidden;
+		}
+
+		/* Responsive */
+		@media (max-width: 1024px) {
+			.hero-cell {
+				grid-column: span 12;
+				padding-right: 0;
+				padding-bottom: 40px;
+				border-bottom: 1px solid var(--color-rule);
+			}
+			.showcase-cell {
+				grid-column: span 12;
+				padding-left: 0;
+				padding-top: 40px;
+				border-left: none;
+			}
+			.capability-card {
+				grid-column: span 6;
+			}
+			.capability-card.rule-left {
+				padding-left: 0;
+				border-left: none;
+			}
+			.capability-card:nth-child(odd) {
+				padding-left: 0;
+				border-left: none;
+			}
+			.capability-card:nth-child(even) {
+				padding-left: 32px;
+				border-left: 1px solid var(--color-rule);
+			}
+			.prompts-cell { grid-column: span 12; }
+			.audience-cell {
+				grid-column: span 6;
+				padding-left: 0;
+			}
+			.audience-cell.rule-left {
+				padding-left: 32px;
+				border-left: 1px solid var(--color-rule);
+			}
+			h1 { font-size: 40px; }
+			.value-cell { padding: 48px 32px; }
+			.value-cell h2 { font-size: 30px; }
+			.section-rule { margin: 56px 0; }
+			.getting-started-cell {
+				flex-direction: column;
+				gap: 24px;
+				text-align: center;
+			}
+			.getting-started-content p {
+				max-width: 100%;
+			}
+		}
+
+		@media (max-width: 768px) {
+			.header { padding: 12px 20px; }
+			.nav { display: none; }
+			.mobile-menu-btn { display: flex; }
+			.main { padding: 32px 20px; }
+			.grid { gap: 32px; }
+
+			/* Remove all vertical rules and left padding on mobile */
+			.grid-cell.rule-left {
+				padding-left: 0;
+				border-left: none;
+			}
+
+			.hero-cell {
+				padding-right: 0;
+				padding-bottom: 32px;
+			}
+			.showcase-cell {
+				padding-top: 32px;
+			}
+			.capability-card {
+				grid-column: span 12;
+				padding: 0 !important;
+				border: none !important;
+			}
+			.audience-cell {
+				grid-column: span 12;
+				padding: 0 !important;
+			}
+			.audience-cell.rule-left {
+				padding-top: 32px !important;
+				margin-top: 8px;
+				border-top: 1px solid var(--color-rule);
+			}
+			h1 { font-size: 34px; }
+			.hero-subtitle { font-size: 16px; }
+			.showcase-stat .number { font-size: 48px; }
+			.value-cell { padding: 40px 24px; }
+			.value-cell h2 { font-size: 26px; }
+			.value-cell p { font-size: 16px; }
+			.section-rule { margin: 48px 0; }
+			.blog-cell {
+				flex-direction: column;
+				gap: 16px;
+				text-align: center;
+			}
+			.blog-content { flex-direction: column; }
+			.footer {
+				flex-direction: column;
+				gap: 16px;
+				text-align: center;
+			}
+			.getting-started-cell {
+				padding: 24px;
+			}
+			.getting-started-actions {
+				flex-direction: column;
+				width: 100%;
+			}
+			.getting-started-actions .btn {
+				justify-content: center;
+			}
+		}
+
+		@media (max-width: 480px) {
+			.cta-row { flex-direction: column; }
+			.btn { justify-content: center; }
 		}
 	</style>
 </head>
 <body>
-	<div class="header">
-		<div class="logo">
-			<img src="https://p198.p4.n0.cdn.zight.com/items/Qwu1Dywx/b61b7b8f-05dc-4063-8a40-53fa4f8e3e97.jpg" alt="Figma Console MCP">
-			Figma Console MCP
-		</div>
-	</div>
-	<div class="container">
-		<h1>Debug Figma plugins<br>with AI assistance</h1>
-		<p class="subtitle">Model Context Protocol server that gives AI assistants real-time access to Figma console logs, design system data, and visual debugging tools.</p>
-		<a href="https://github.com/southleft/figma-console-mcp" class="cta">
-			<svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-				<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-			</svg>
-			View Documentation
+	<header class="header">
+		<a href="/" class="logo">
+			<img src="https://docs.figma-console-mcp.southleft.com/logo/light.svg" alt="Figma Console MCP" class="logo-dark">
+			<img src="https://docs.figma-console-mcp.southleft.com/logo/dark.svg" alt="Figma Console MCP" class="logo-light" style="display: none;">
 		</a>
-		<div class="features">
-			<div class="feature">
-				<h3>Real-time Console Access</h3>
-				<p>Capture plugin console logs, errors, and stack traces as they happen</p>
+		<div class="header-right">
+			<nav class="nav">
+				<a href="https://docs.figma-console-mcp.southleft.com">Documentation</a>
+				<a href="https://github.com/southleft/figma-console-mcp">GitHub</a>
+				<a href="https://www.npmjs.com/package/figma-console-mcp">npm</a>
+				<a href="https://southleft.com/insights/ai/figma-console-mcp-ai-powered-design-system-management/">Blog</a>
+			</nav>
+			<button class="theme-toggle" aria-label="Toggle theme">
+				<svg class="moon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+				<svg class="sun" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+			</button>
+			<button class="mobile-menu-btn" aria-label="Menu">
+				<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+			</button>
+		</div>
+	</header>
+
+	<!-- Mobile Menu -->
+	<div class="mobile-menu" id="mobileMenu">
+		<div class="mobile-menu-header">
+			<a href="/" class="logo">
+				<img src="https://docs.figma-console-mcp.southleft.com/logo/light.svg" alt="Figma Console MCP" class="logo-dark">
+				<img src="https://docs.figma-console-mcp.southleft.com/logo/dark.svg" alt="Figma Console MCP" class="logo-light" style="display: none;">
+			</a>
+			<button class="mobile-menu-close" aria-label="Close menu">
+				<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+			</button>
+		</div>
+		<nav class="mobile-menu-nav">
+			<a href="https://docs.figma-console-mcp.southleft.com">Documentation</a>
+			<a href="https://github.com/southleft/figma-console-mcp">GitHub</a>
+			<a href="https://www.npmjs.com/package/figma-console-mcp">npm</a>
+			<a href="https://southleft.com/insights/ai/figma-console-mcp-ai-powered-design-system-management/">Blog</a>
+		</nav>
+	</div>
+
+	<main class="main">
+		<div class="grid">
+			<!-- Hero -->
+			<div class="grid-cell hero-cell">
+				<div class="badge">Model Context Protocol</div>
+				<h1>Your design system, now a <span class="highlight">living API</span></h1>
+				<p class="hero-subtitle">The most comprehensive MCP server for Figma. Give AI assistants deep access to your design tokens, components, and variables. Read, query, and even create designs programmatically through natural language.</p>
+				<div class="cta-row">
+					<a href="https://docs.figma-console-mcp.southleft.com" class="btn btn-primary">
+						Read the Docs
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+					</a>
+					<a href="https://github.com/southleft/figma-console-mcp" class="btn btn-secondary">
+						<svg fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+						View on GitHub
+					</a>
+				</div>
 			</div>
-			<div class="feature">
-				<h3>Design System Extraction</h3>
-				<p>Pull variables, components, and styles directly from Figma files</p>
-			</div>
-			<div class="feature">
-				<h3>Visual Debugging</h3>
-				<p>Take screenshots and export component images for visual reference</p>
+
+			<!-- Capabilities showcase -->
+			<div class="grid-cell showcase-cell rule-left">
+				<div class="showcase-label">What AI Can Access</div>
+				<div class="showcase-stat">
+					<span class="number">40+</span>
+					<span class="label">MCP tools for Figma</span>
+				</div>
+				<div class="capability-list">
+					<div class="capability-item">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+						<span>Design tokens and variables</span>
+					</div>
+					<div class="capability-item">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+						<span>Component specs and properties</span>
+					</div>
+					<div class="capability-item">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+						<span>Programmatic design creation</span>
+					</div>
+					<div class="capability-item">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+						<span>Real-time plugin debugging</span>
+					</div>
+				</div>
 			</div>
 		</div>
-	</div>
-	<div class="footer">
-		© 2025 Figma Console MCP · MIT License
-	</div>
+
+		<hr class="section-rule">
+
+		<!-- Value proposition -->
+		<div class="grid">
+			<div class="grid-cell value-cell">
+				<h2>Design system intelligence for AI assistants</h2>
+				<p>Whether you're maintaining a component library, implementing designs in code, or building Figma plugins, this MCP server gives AI the deep context it needs.</p>
+			</div>
+		</div>
+
+		<hr class="section-rule">
+
+		<!-- Capabilities detail -->
+		<div class="grid">
+			<div class="grid-cell capability-card">
+				<div class="capability-icon">
+					<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+				</div>
+				<h3>Design Tokens</h3>
+				<p>Extract colors, typography, spacing, and effects. Export as CSS custom properties, Tailwind config, or Sass variables.</p>
+			</div>
+
+			<div class="grid-cell capability-card rule-left">
+				<div class="capability-icon">
+					<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+				</div>
+				<h3>Component Specs</h3>
+				<p>Get detailed layout, spacing, variants, and property data for any component in your design system.</p>
+			</div>
+
+			<div class="grid-cell capability-card rule-left">
+				<div class="capability-icon">
+					<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+				</div>
+				<h3>Programmatic Design</h3>
+				<p>Create and modify variables, build component variants, and generate design elements through natural language.</p>
+			</div>
+
+			<div class="grid-cell capability-card rule-left">
+				<div class="capability-icon">
+					<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+				</div>
+				<h3>Plugin Debugging</h3>
+				<p>Capture real-time console logs from Figma plugins. Let AI analyze errors and suggest fixes without context switching.</p>
+			</div>
+		</div>
+
+		<hr class="section-rule">
+
+		<div class="grid">
+			<!-- Example Prompts -->
+			<div class="grid-cell prompts-cell">
+				<div class="section-header">
+					<div class="section-header-icon">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+					</div>
+					<h3>What you can ask</h3>
+				</div>
+				<div class="prompt-list">
+					<div class="prompt-item">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+						<span>"Extract all color variables as Tailwind config"</span>
+					</div>
+					<div class="prompt-item">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+						<span>"Get the Button component specs from my design system"</span>
+					</div>
+					<div class="prompt-item">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+						<span>"Create a dark mode version of my color variables"</span>
+					</div>
+					<div class="prompt-item">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+						<span>"Why is my plugin throwing this error?"</span>
+					</div>
+				</div>
+			</div>
+
+			<!-- For Designers -->
+			<div class="grid-cell audience-cell rule-left">
+				<div class="audience-header">
+					<div class="audience-icon">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+					</div>
+					<h3>For Designers</h3>
+				</div>
+				<ul class="audience-list">
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Generate design token documentation automatically</span>
+					</li>
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Create component variants with AI assistance</span>
+					</li>
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Debug Figma plugins without leaving your workflow</span>
+					</li>
+				</ul>
+			</div>
+		</div>
+
+		<div class="grid" style="margin-top: 48px;">
+			<!-- For Engineers -->
+			<div class="grid-cell audience-cell">
+				<div class="audience-header">
+					<div class="audience-icon">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+					</div>
+					<h3>For Engineers</h3>
+				</div>
+				<ul class="audience-list">
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Extract tokens as CSS, Tailwind, or Sass variables</span>
+					</li>
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Get accurate component specs for implementation</span>
+					</li>
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Query your design system via MCP-enabled AI tools</span>
+					</li>
+				</ul>
+			</div>
+
+			<!-- For Teams -->
+			<div class="grid-cell audience-cell rule-left">
+				<div class="audience-header">
+					<div class="audience-icon">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+					</div>
+					<h3>For Teams of All Sizes</h3>
+				</div>
+				<ul class="audience-list">
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Indie developers to enterprise design systems</span>
+					</li>
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Local mode for development, remote for production</span>
+					</li>
+					<li>
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+						<span>Works with Claude, Cursor, and any MCP client</span>
+					</li>
+				</ul>
+			</div>
+		</div>
+
+		<!-- Getting Started CTA -->
+		<div class="grid">
+			<div class="grid-cell getting-started-cell">
+				<div class="getting-started-content">
+					<h3>Ready to get started?</h3>
+					<p>Setup varies based on your needs: remote mode for quick API access, or local mode for full plugin debugging. Our docs will guide you through the right path.</p>
+				</div>
+				<div class="getting-started-actions">
+					<a href="https://docs.figma-console-mcp.southleft.com/setup" class="btn btn-primary">
+						View Setup Guide
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+					</a>
+					<a href="https://docs.figma-console-mcp.southleft.com/tools" class="btn btn-secondary">
+						Explore Tools
+					</a>
+				</div>
+			</div>
+		</div>
+
+		<div class="grid">
+			<!-- Blog CTA -->
+			<a href="https://southleft.com/insights/ai/figma-console-mcp-ai-powered-design-system-management/" class="grid-cell blog-cell">
+				<div class="blog-content">
+					<div class="blog-icon">
+						<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+					</div>
+					<div class="blog-text">
+						<h4>Read the announcement</h4>
+						<p>AI-Powered Design System Management with Figma Console MCP</p>
+					</div>
+				</div>
+				<span class="blog-link">
+					Read article
+					<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+				</span>
+			</a>
+		</div>
+	</main>
+
+	<footer class="footer">
+		<p>MIT License. Built by <a href="https://southleft.com">Southleft</a></p>
+		<div class="footer-links">
+			<a href="https://docs.figma-console-mcp.southleft.com">Docs</a>
+			<a href="https://github.com/southleft/figma-console-mcp">GitHub</a>
+			<a href="https://www.npmjs.com/package/figma-console-mcp">npm</a>
+		</div>
+	</footer>
+
+	<script>
+		// Theme toggle with system preference detection
+		(function() {
+			const html = document.documentElement;
+			const toggle = document.querySelector('.theme-toggle');
+			const logosDark = document.querySelectorAll('.logo-dark');
+			const logosLight = document.querySelectorAll('.logo-light');
+
+			function getSystemTheme() {
+				return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+			}
+
+			function getStoredTheme() {
+				return localStorage.getItem('theme');
+			}
+
+			function setTheme(theme) {
+				html.setAttribute('data-theme', theme);
+				localStorage.setItem('theme', theme);
+				updateLogos(theme);
+			}
+
+			function updateLogos(theme) {
+				logosDark.forEach(logo => {
+					logo.style.display = theme === 'light' ? 'none' : 'block';
+				});
+				logosLight.forEach(logo => {
+					logo.style.display = theme === 'light' ? 'block' : 'none';
+				});
+			}
+
+			// Initialize theme
+			const storedTheme = getStoredTheme();
+			const initialTheme = storedTheme || getSystemTheme();
+			setTheme(initialTheme);
+
+			// Listen for system theme changes
+			window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+				if (!getStoredTheme()) {
+					setTheme(e.matches ? 'light' : 'dark');
+				}
+			});
+
+			// Toggle button
+			toggle.addEventListener('click', () => {
+				const currentTheme = html.getAttribute('data-theme');
+				setTheme(currentTheme === 'light' ? 'dark' : 'light');
+			});
+		})();
+
+		// Mobile menu toggle
+		(function() {
+			const menuBtn = document.querySelector('.mobile-menu-btn');
+			const menu = document.getElementById('mobileMenu');
+			const closeBtn = document.querySelector('.mobile-menu-close');
+			const menuLinks = document.querySelectorAll('.mobile-menu-nav a');
+
+			function openMenu() {
+				menu.classList.add('active');
+				document.body.classList.add('menu-open');
+			}
+
+			function closeMenu() {
+				menu.classList.remove('active');
+				document.body.classList.remove('menu-open');
+			}
+
+			menuBtn.addEventListener('click', openMenu);
+			closeBtn.addEventListener('click', closeMenu);
+
+			// Close menu when clicking a link
+			menuLinks.forEach(link => {
+				link.addEventListener('click', closeMenu);
+			});
+
+			// Close menu on escape key
+			document.addEventListener('keydown', (e) => {
+				if (e.key === 'Escape' && menu.classList.contains('active')) {
+					closeMenu();
+				}
+			});
+		})();
+	</script>
 </body>
 </html>`,
 			{

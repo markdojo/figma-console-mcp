@@ -201,7 +201,15 @@ Temporary Items
 # Release artifacts
 *.zip
 
-# Development documentation (internal use only)
-docs/testing/
-docs/analysis/
-.claude/
+# Claude Code local settings (user-specific)
+.claude/settings.local.json
+
+# Playwright MCP temp files
+.playwright-mcp/
+
+# VS Code MCP config (contains tokens)
+.vscode/mcp.json
+.env.mcp
+
+# Internal notes and drafts
+.notes/

@@ -1,3 +1,8 @@
+---
+title: "Troubleshooting"
+description: "Solutions to common issues including browser connection, console logs, screenshots, and configuration problems."
+---
+
 # Troubleshooting Guide
 
 ## Common Issues and Solutions
@@ -411,7 +416,7 @@ If you're still experiencing issues:
 
 2. **Verify Deployment**
    ```bash
-   curl https://figma-console-mcp.southleft-llc.workers.dev/health
+   curl https://figma-console-mcp.southleft.com/health
    ```
 
 3. **Check Cloudflare Status**

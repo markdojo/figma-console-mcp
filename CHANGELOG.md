@@ -1,40 +1,87 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to Figma Console MCP will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.1] - 2026-01-17
+## [1.3.0] - 2025-01-23
 
 ### Added
-- **Reliable ID resolution for library variables**: All library variables now include `id` and `nodeId` fields via automatic import strategy using `importVariableByKeyAsync`
-- **Method tracking**: Each variable now includes a `method` field indicating how it was resolved (`local_or_alias`, `imported`)
-- **Enhanced summary statistics**: Added `resolutionMethods` breakdown showing counts per resolution method
-- **Improved tool documentation**: Updated `figma_get_library_variables` description to reflect reliable ID resolution
+- **Branch URL Support**: `figma_get_variables` now supports Figma branch URLs
+  - Path-based format: `/design/{fileKey}/branch/{branchKey}/{fileName}`
+  - Query-based format: `?branch-id={branchId}`
+  - Auto-detection when using `figma_navigate` first
+- `extractFigmaUrlInfo()` utility for comprehensive URL parsing
+- `withTimeout()` wrapper for API stability (30s default)
+- `refreshCache` parameter for forcing fresh data fetch
+- Frame detachment protection in desktop connector
+- GitHub Copilot setup instructions in documentation
 
 ### Changed
-- **Strategy 3 (Import)**: Now uses `figma.variables.importVariableByKeyAsync()` to explicitly import library variables into file context, making their IDs accessible
-- **Simplified resolution flow**: Removed ineffective constructed ID strategy, streamlining to 3 working strategies
+- Variables API now uses branch key directly for API calls when on a branch
+- Improved error handling for API requests with better error messages
 
-### Removed
-- **Strategy 3 (Constructed ID)**: Removed ineffective ID construction strategy that never successfully resolved variables (0% success rate)
-- **Dead code cleanup**: Removed ~50 lines of unused code related to constructed ID attempts
+### Documentation
+- Comprehensive Mintlify documentation site launch
+- Redesigned landing page with value-focused hero and bento-box layout
+- Updated tool count from 36+ to 40+
+- Added Open Graph and Twitter meta tags
+
+## [1.2.5] - 2025-01-19
 
 ### Fixed
-- **100% ID resolution**: Library variables now reliably have IDs, even when not yet referenced in the current file
-- **Improved reliability**: All 307/307 variables successfully resolved in testing (previously many had `null` IDs)
+- Documentation cleanup and error fixes
 
-## [1.1.0] - Previous Release
+## [1.2.4] - 2025-01-19
+
+### Fixed
+- McpServer constructor type error - moved instructions to correct parameter
+
+## [1.2.3] - 2025-01-19
+
+### Documentation
+- Comprehensive documentation update for v1.2.x features
+
+## [1.2.2] - 2025-01-18
+
+### Fixed
+- Gemini model compatibility fix
+
+## [1.2.1] - 2025-01-17
+
+### Fixed
+- Component set label alignment issues
+
+## [1.1.1] - 2025-01-16
+
+### Fixed
+- Minor bug fixes and stability improvements
+
+## [1.1.0] - 2025-01-15
 
 ### Added
-- Initial release with library variable support
-- Basic ID resolution for referenced variables
+- New design system tools
+- Enhanced component inspection capabilities
+- Improved variable extraction
 
----
+## [1.0.0] - 2025-01-14
 
-## Notes for Contributors
+### Added
+- Initial public release
+- 40+ MCP tools for Figma automation
+- Console monitoring and code execution
+- Design system extraction (variables, styles, components)
+- Component instantiation and manipulation
+- Real-time Figma Desktop Bridge plugin
+- Support for both local (stdio) and Cloudflare Workers deployment
 
-When contributing to this repository, remember to:
-- Update remote server URLs if deploying your own server (replace `figma-console-mcp.southleft.com`)
-- Update OAuth callback URLs in deployment configuration if self-hosting
+[1.3.0]: https://github.com/southleft/figma-console-mcp/compare/v1.2.5...v1.3.0
+[1.2.5]: https://github.com/southleft/figma-console-mcp/compare/v1.2.4...v1.2.5
+[1.2.4]: https://github.com/southleft/figma-console-mcp/compare/v1.2.3...v1.2.4
+[1.2.3]: https://github.com/southleft/figma-console-mcp/compare/v1.2.2...v1.2.3
+[1.2.2]: https://github.com/southleft/figma-console-mcp/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/southleft/figma-console-mcp/compare/v1.1.1...v1.2.1
+[1.1.1]: https://github.com/southleft/figma-console-mcp/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/southleft/figma-console-mcp/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/southleft/figma-console-mcp/releases/tag/v1.0.0

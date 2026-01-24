@@ -1,3 +1,8 @@
+---
+title: "Mode Comparison"
+description: "Understand the differences between Remote, Local, and NPX installation methods and when to use each."
+---
+
 # Installation Methods & Execution Modes - Complete Comparison
 
 This document clarifies the differences between installation methods and execution modes to help you choose the right setup.
@@ -131,7 +136,7 @@ Variables & Components Data
 
 ## Tool Availability by Mode
 
-### All 14 Tools Available in Both Modes
+### Core Tools Available in Both Modes
 
 | Tool | Remote | Local | Notes |
 |------|--------|-------|-------|
@@ -379,7 +384,7 @@ All three installation methods are completely free:
 - You need unreleased features
 - You're testing changes before contributing
 
-**Key Takeaway:** All three methods provide the same 14 MCP tools. The difference is in:
+**Key Takeaway:** All three methods provide the same 40+ MCP tools. The difference is in:
 - **Authentication**: OAuth (Remote SSE) vs PAT (NPX + Local Git)
 - **Distribution**: URL (Remote SSE) vs npm (NPX) vs git (Local Git)
 - **Execution**: Cloud (Remote SSE) vs Local (NPX + Local Git)
