@@ -5,6 +5,21 @@ All notable changes to Figma Console MCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-01-26
+
+### Added
+- **`outputPath` parameter** for `figma_get_variables` and `figma_get_library_variables`
+  - Write large variable datasets directly to JSON files instead of returning in response
+  - Bypasses MCP token limits when working with large design systems (1000+ variables)
+  - Files can be used directly with `css_import_snapshot` and other tools
+  - Example: `figma_get_variables({ outputPath: "/tmp/figma-vars.json" })`
+
+### Changed
+- **`figma_batch_update_variables` marked EXPERIMENTAL**
+  - Added stability warning to tool description
+  - May not work reliably in all cases
+  - Does not affect other variable operations if it fails
+
 ## [1.3.0] - 2025-01-23
 
 ### Added
@@ -76,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-time Figma Desktop Bridge plugin
 - Support for both local (stdio) and Cloudflare Workers deployment
 
+[1.3.1]: https://github.com/markdojo/figma-console-mcp/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/southleft/figma-console-mcp/compare/v1.2.5...v1.3.0
 [1.2.5]: https://github.com/southleft/figma-console-mcp/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/southleft/figma-console-mcp/compare/v1.2.3...v1.2.4

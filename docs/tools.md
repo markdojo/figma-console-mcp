@@ -46,6 +46,8 @@ This guide provides detailed documentation for each tool, including when to use 
 | | `figma_delete_variable_collection` | Delete collections | Local |
 | | `figma_add_mode` | Add modes to collections | Local |
 | | `figma_rename_mode` | Rename modes | Local |
+| **⚡ Batch Operations** | `figma_batch_create_variables` | Create multiple variables at once | Local |
+| | `figma_batch_update_variables` | Update multiple variables at once (EXPERIMENTAL) | Local |
 | **📐 Node Manipulation** | `figma_resize_node` | Resize a node | Local |
 | | `figma_move_node` | Move a node | Local |
 | | `figma_clone_node` | Clone a node | Local |
@@ -312,6 +314,18 @@ figma_navigate({ url: 'https://figma.com/design/abc123/branch/xyz789/My-File' })
 figma_get_variables({ refreshCache: true })
 ```
 
+**Large Dataset Export (bypasses MCP token limits):**
+
+```javascript
+// Write variables to a file for large design systems
+figma_get_variables({
+  fileUrl: 'https://figma.com/design/abc123',
+  outputPath: '/tmp/figma-vars.json'
+})
+// Returns: { path: '/tmp/figma-vars.json', size: '245 KB', variables: 1247 }
+// File can be used with css_import_snapshot or read by other tools
+```
+
 **Parameters:**
 - `fileUrl` (optional): Figma file URL - supports main files and branches (uses current if navigated)
 - `includePublished` (optional): Include published variables (default: true)
@@ -320,6 +334,7 @@ figma_get_variables({ refreshCache: true })
 - `include_usage` (optional): Include usage in styles/components
 - `include_dependencies` (optional): Include dependency graph
 - `refreshCache` (optional): Force fresh data fetch, bypassing cache
+- `outputPath` (optional): Write results to a JSON file instead of returning in response. Useful for large datasets that exceed MCP token limits. Example: `"/tmp/figma-vars.json"`
 
 **Returns:**
 - Variable collections
@@ -351,9 +366,21 @@ figma_get_library_variables({
 })
 ```
 
+**Large Dataset Export (bypasses MCP token limits):**
+
+```javascript
+// Write library variables to a file for large design systems
+figma_get_library_variables({
+  outputPath: '/tmp/figma-library.json'
+})
+// Returns: { path: '/tmp/figma-library.json', size: '180 KB', libraryVariables: 307 }
+// File can be used with css_import_snapshot --libraryPath
+```
+
 **Parameters:**
 - `includeLocal` (optional): Include local variables in result (default: `true`)
 - `collectionFilter` (optional): Filter by collection name (case-insensitive substring match)
+- `outputPath` (optional): Write results to a JSON file instead of returning in response. Useful for large datasets that exceed MCP token limits. Example: `"/tmp/figma-library.json"`
 
 **Returns:**
 - `localVariables`: Variables defined in the current file
@@ -1028,6 +1055,126 @@ figma_rename_mode({
 - `collectionId` (required): Collection containing the mode
 - `modeId` (required): Mode ID to rename
 - `newName` (required): New name for the mode
+
+---
+
+## ⚡ Batch Variable Operations (Local Mode Only)
+
+> **⚠️ Requires Desktop Bridge Plugin**: These tools only work in Local Mode with the Desktop Bridge plugin running in Figma.
+
+These tools enable high-performance variable operations for large design system syncs.
+
+### `figma_batch_create_variables`
+
+Create multiple variables in a collection at once. Reduces individual API calls by batching operations.
+
+**When to Use:**
+- Syncing design tokens from CSS/code to Figma
+- Initializing a new design system with many variables
+- Migrating variables between files
+
+**Usage:**
+```javascript
+figma_batch_create_variables({
+  collectionId: "VariableCollectionId:123:456",
+  variables: [
+    {
+      name: "colors/primary/500",
+      type: "COLOR",
+      valuesByMode: {
+        "1:0": "#3B82F6",  // Light mode
+        "1:1": "#60A5FA"   // Dark mode
+      },
+      description: "Primary brand color"
+    },
+    {
+      name: "spacing/4",
+      type: "FLOAT",
+      valuesByMode: {
+        "1:0": 16,
+        "1:1": 16
+      }
+    }
+  ],
+  options: {
+    atomic: true  // All fail if any fails
+  }
+})
+```
+
+**Parameters:**
+- `collectionId` (required): Target collection ID (get from `figma_get_variables`)
+- `variables` (required): Array of variables to create, each with:
+  - `name`: Variable name (use `/` for grouping)
+  - `type`: `"COLOR"`, `"FLOAT"`, `"STRING"`, or `"BOOLEAN"`
+  - `valuesByMode`: Object mapping mode IDs to values
+  - `description` (optional): Variable description
+- `options` (optional):
+  - `atomic`: If true, all operations fail if any single operation fails (default: false)
+
+**Returns:**
+- Created variable IDs and names
+- Error details for any failures
+
+---
+
+### `figma_batch_update_variables`
+
+> **⚠️ EXPERIMENTAL**: This tool is experimental and may not work reliably in all cases. It does not affect other variable operations if it fails.
+
+Update multiple variable values across modes in one call. Supports 50+ updates per batch.
+
+**When to Use:**
+- Syncing updated token values from CSS to Figma
+- Bulk theme updates
+- Design system migrations
+
+**Usage:**
+```javascript
+figma_batch_update_variables({
+  updates: [
+    {
+      variableId: "VariableID:123:456",
+      modeId: "1:0",
+      value: "#10B981"  // New color
+    },
+    {
+      variableId: "VariableID:123:789",
+      modeId: "1:0",
+      value: 24  // New spacing
+    },
+    {
+      variableId: "VariableID:123:999",
+      modeId: "1:0",
+      value: { type: "VARIABLE_ALIAS", id: "VariableID:abc:def" }  // Alias
+    }
+  ],
+  options: {
+    continueOnError: true  // Continue after failures
+  }
+})
+```
+
+**Parameters:**
+- `updates` (required): Array of updates, each with:
+  - `variableId`: Variable ID to update
+  - `modeId`: Mode ID to update value in
+  - `value`: New value (format depends on type):
+    - COLOR: Hex string `"#FF0000"`
+    - FLOAT: Number `16`
+    - STRING: Text `"Hello"`
+    - BOOLEAN: `true` or `false`
+    - ALIAS: `{ type: "VARIABLE_ALIAS", id: "VariableID:..." }`
+- `options` (optional):
+  - `continueOnError`: If true, continue updating after errors (default: false)
+
+**Returns:**
+- Success/failure status for each update
+- Summary of completed vs failed operations
+
+**Performance:**
+- Reduces 2000+ individual updates to ~50 batch calls
+- Execution time drops from minutes to seconds
 
 ---
 
