@@ -3,7 +3,7 @@
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> A fork of [southleft/figma-console-mcp](https://github.com/southleft/figma-console-mcp) focused on **local mode** with enhancements for design token synchronization workflows.
+> A fork of [Figma Console MCP](https://github.com/southleft/figma-console-mcp) by Southleft, focused on **local mode** with enhancements for design token synchronization workflows.
 
 ## What's Different in This Fork
 
@@ -38,7 +38,7 @@ figma_get_library_variables({ outputPath: "/tmp/figma-library.json" })
 
 ## Installation (Local Mode Only)
 
-This fork is local-only. For remote/SSE deployment, use the [upstream project](https://github.com/southleft/figma-console-mcp).
+This fork is local-only. For remote/SSE deployment, use [Figma Console MCP](https://github.com/southleft/figma-console-mcp).
 
 ### Prerequisites
 - Node.js 18+
@@ -108,12 +108,12 @@ Required for variable management and design creation tools.
 
 ---
 
-## Upstream
+## Figma Console MCP (Original)
 
-For complete documentation, remote mode, OAuth setup, and general features, see the upstream project:
+For complete documentation, remote mode, OAuth setup, and general features, see the original project by Southleft:
 
-- **Upstream Repo:** [github.com/southleft/figma-console-mcp](https://github.com/southleft/figma-console-mcp)
-- **Upstream Docs:** [docs.figma-console-mcp.southleft.com](https://docs.figma-console-mcp.southleft.com)
+- **Repo:** [github.com/southleft/figma-console-mcp](https://github.com/southleft/figma-console-mcp)
+- **Docs:** [docs.figma-console-mcp.southleft.com](https://docs.figma-console-mcp.southleft.com)
 
 ---
 
