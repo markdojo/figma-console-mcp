@@ -1483,8 +1483,11 @@ export class FigmaDesktopConnector {
   }
 
   /**
-   * Update multiple variable values across modes in one call
+   * EXPERIMENTAL: Update multiple variable values across modes in one call
    * Reduces 2431 individual updates to ~50 batch calls
+   *
+   * Note: This function is experimental and may not work reliably in all cases.
+   * It does not affect other variable operations if it fails.
    */
   async batchUpdateVariables(params: {
     updates: Array<{

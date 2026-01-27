@@ -5,6 +5,8 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { dirname } from "path";
 import type { FigmaAPI, FigmaUrlInfo } from "./figma-api.js";
 import { extractFileKey, extractFigmaUrlInfo, formatVariables, formatComponentData, withTimeout } from "./figma-api.js";
 import { createChildLogger } from "./logger.js";
@@ -1078,6 +1080,14 @@ export function registerFigmaAPITools(
 					"instead of just alias references. Useful for getting color hex values without manual resolution. " +
 					"Default: false."
 				),
+			outputPath: z
+				.string()
+				.optional()
+				.describe(
+					"Write results to a JSON file instead of returning in response. " +
+					"Useful for large datasets that exceed MCP token limits. " +
+					"Example: '/tmp/figma-vars.json'. The file can then be read by other tools like css_import_snapshot."
+				),
 		},
 		async ({
 			fileUrl,
@@ -1098,7 +1108,8 @@ export function registerFigmaAPITools(
 			parseFromConsole,
 			page,
 			pageSize,
-			resolveAliases
+			resolveAliases,
+			outputPath
 		}) => {
 			// Extract fileKey and optional branchId outside try block so they're available in catch block
 			const url = fileUrl || getCurrentUrl();
@@ -1477,6 +1488,41 @@ export function registerFigmaAPITools(
 						`Response size check: ${responseSizeMB} MB`
 					);
 
+					// If outputPath is provided, write to file instead of returning in response
+					if (outputPath) {
+						try {
+							const dir = dirname(outputPath);
+							if (!existsSync(dir)) {
+								mkdirSync(dir, { recursive: true });
+							}
+							writeFileSync(outputPath, JSON.stringify(responsePayload, null, 2), 'utf8');
+							const fileSizeKB = (responseSizeBytes / 1024).toFixed(1);
+							return {
+								content: [
+									{
+										type: "text",
+										text: `✅ Variables written to file\n\n` +
+											`**Path:** ${outputPath}\n` +
+											`**Size:** ${fileSizeKB} KB\n` +
+											`**Variables:** ${responseData.variables?.length || 0}\n` +
+											`**Collections:** ${responseData.variableCollections?.length || 0}\n\n` +
+											`Use this file with \`css_import_snapshot --inputPath="${outputPath}"\``,
+									},
+								],
+							};
+						} catch (writeError) {
+							return {
+								content: [
+									{
+										type: "text",
+										text: `Error writing to file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+									},
+								],
+								isError: true,
+							};
+						}
+					}
+
 					return {
 						content: [
 							{
@@ -1760,6 +1806,41 @@ export function registerFigmaAPITools(
 						restApiSucceeded = true;
 						logger.info({ fileKey }, "REST API fetch successful, skipping Desktop Bridge");
 
+						// If outputPath is provided, write to file instead of returning in response
+						if (outputPath) {
+							try {
+								const dir = dirname(outputPath);
+								if (!existsSync(dir)) {
+									mkdirSync(dir, { recursive: true });
+								}
+								writeFileSync(outputPath, JSON.stringify(responseData, null, 2), 'utf8');
+								const fileSizeKB = (Buffer.byteLength(JSON.stringify(responseData), 'utf8') / 1024).toFixed(1);
+								return {
+									content: [
+										{
+											type: "text",
+											text: `✅ Variables written to file\n\n` +
+												`**Path:** ${outputPath}\n` +
+												`**Size:** ${fileSizeKB} KB\n` +
+												`**Variables:** ${responseData.local?.variables?.length || 0}\n` +
+												`**Collections:** ${responseData.local?.collections?.length || 0}\n\n` +
+												`Use this file with \`css_import_snapshot --inputPath="${outputPath}"\``,
+										},
+									],
+								};
+							} catch (writeError) {
+								return {
+									content: [
+										{
+											type: "text",
+											text: `Error writing to file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+										},
+									],
+									isError: true,
+								};
+							}
+						}
+
 						// Use adaptive response to prevent context exhaustion
 						return adaptiveResponse(responseData, {
 							toolName: "figma_get_variables",
@@ -1976,9 +2057,9 @@ export function registerFigmaAPITools(
 								});
 							} else {
 								// format === 'full'
-								// Check if we need to auto-summarize
+								// Check if we need to auto-summarize (skip if outputPath is provided - file output can handle large data)
 								const estimatedTokens = estimateTokens(responseData);
-								if (estimatedTokens > 25000) {
+								if (estimatedTokens > 25000 && !outputPath) {
 									logger.warn(
 										{ fileKey, estimatedTokens },
 										'Full data exceeds MCP token limit (25K), auto-summarizing. Use format=summary or format=filtered to get specific data.'
@@ -1993,7 +2074,7 @@ export function registerFigmaAPITools(
 														fileKey,
 														source: 'desktop_connection_auto_summarized',
 														warning: 'Full dataset exceeds MCP token limit (25,000 tokens)',
-														suggestion: 'Use format="summary" for overview or format="filtered" with collection/namePattern/mode filters to get specific variables',
+														suggestion: 'Use format="summary" for overview or format="filtered" with collection/namePattern/mode filters to get specific variables, or use outputPath to write to file',
 														estimatedTokens,
 														summary,
 													}
@@ -2066,6 +2147,48 @@ export function registerFigmaAPITools(
 								);
 
 								return { content };
+							}
+
+							// If outputPath is provided, write to file instead of returning in response
+							if (outputPath) {
+								try {
+									const outputData = {
+										fileKey,
+										source: "desktop_connection",
+										format: format || 'full',
+										timestamp: dataForCache.timestamp,
+										data: responseData,
+									};
+									const dir = dirname(outputPath);
+									if (!existsSync(dir)) {
+										mkdirSync(dir, { recursive: true });
+									}
+									writeFileSync(outputPath, JSON.stringify(outputData, null, 2), 'utf8');
+									const fileSizeKB = (Buffer.byteLength(JSON.stringify(outputData), 'utf8') / 1024).toFixed(1);
+									return {
+										content: [
+											{
+												type: "text",
+												text: `✅ Variables written to file\n\n` +
+													`**Path:** ${outputPath}\n` +
+													`**Size:** ${fileSizeKB} KB\n` +
+													`**Variables:** ${responseData.variables?.length || 0}\n` +
+													`**Collections:** ${responseData.variableCollections?.length || 0}\n\n` +
+													`Use this file with \`css_import_snapshot --inputPath="${outputPath}"\``,
+											},
+										],
+									};
+								} catch (writeError) {
+									return {
+										content: [
+											{
+												type: "text",
+												text: `Error writing to file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+											},
+										],
+										isError: true,
+									};
+								}
 							}
 
 							// Default: return full data (removed pretty printing)

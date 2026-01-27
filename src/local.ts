@@ -22,7 +22,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { fileURLToPath } from "url";
-import { resolve } from "path";
+import { resolve, dirname } from "path";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { LocalBrowserManager } from "./browser/local.js";
 import { ConsoleMonitor } from "./core/console-monitor.js";
 import { getConfig } from "./core/config.js";
@@ -1292,8 +1293,16 @@ If Design Systems Assistant MCP is not available, install it from: https://githu
 					.string()
 					.optional()
 					.describe("Optional: Filter by collection name"),
+				outputPath: z
+					.string()
+					.optional()
+					.describe(
+						"Write results to a JSON file instead of returning in response. " +
+						"Useful for large datasets that exceed MCP token limits. " +
+						"Example: '/tmp/figma-library.json'. The file can then be read by other tools like css_import_snapshot."
+					),
 			},
-			async ({ includeLocal, collectionFilter }) => {
+			async ({ includeLocal, collectionFilter, outputPath }) => {
 				const maxRetries = 2;
 				let lastError: Error | null = null;
 
@@ -1554,6 +1563,42 @@ return JSON.stringify(await getAllLibraryVariables(), null, 2);
 								],
 								isError: true,
 							};
+						}
+
+						// If outputPath is provided, write to file instead of returning in response
+						if (outputPath) {
+							try {
+								const dir = dirname(outputPath);
+								if (!existsSync(dir)) {
+									mkdirSync(dir, { recursive: true });
+								}
+								writeFileSync(outputPath, JSON.stringify(parsedResult, null, 2), 'utf8');
+								const fileSizeKB = (Buffer.byteLength(JSON.stringify(parsedResult), 'utf8') / 1024).toFixed(1);
+								return {
+									content: [
+										{
+											type: "text",
+											text: `✅ Library variables written to file\n\n` +
+												`**Path:** ${outputPath}\n` +
+												`**Size:** ${fileSizeKB} KB\n` +
+												`**Local variables:** ${parsedResult.localVariables?.length || 0}\n` +
+												`**Library variables:** ${parsedResult.libraryVariables?.length || 0}\n` +
+												`**Collections:** ${parsedResult.collections?.length || 0}\n\n` +
+												`Use this file with \`css_import_snapshot --libraryPath="${outputPath}"\``,
+										},
+									],
+								};
+							} catch (writeError) {
+								return {
+									content: [
+										{
+											type: "text",
+											text: `Error writing to file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+										},
+									],
+									isError: true,
+								};
+							}
 						}
 
 						return {
@@ -2179,10 +2224,10 @@ return JSON.stringify(await getAllLibraryVariables(), null, 2);
 			},
 		);
 
-		// Tool: Batch update variables
+		// Tool: Batch update variables (EXPERIMENTAL)
 		this.server.tool(
 			"figma_batch_update_variables",
-			"Update multiple variable values across modes in one call. Supports up to 50+ updates per batch. Reduces execution time from minutes to seconds for large syncs. Supports continue-on-error mode for resilience. Requires the Desktop Bridge plugin to be running.",
+			"EXPERIMENTAL: Update multiple variable values across modes in one call. Supports up to 50+ updates per batch. Reduces execution time from minutes to seconds for large syncs. Supports continue-on-error mode for resilience. Requires the Desktop Bridge plugin to be running. Note: This tool is experimental and may not work reliably in all cases.",
 			{
 				updates: z.array(
 					z.object({
